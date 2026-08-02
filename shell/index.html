@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Aether</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <div class="panel" id="app">
+    <header class="panel-header">
+      <div class="brand">
+        <div class="logo">A</div>
+        <div class="brand-text">
+          <div class="title">Aether</div>
+          <div class="subtitle">Presence</div>
+        </div>
+      </div>
+      <div class="header-actions">
+        <button class="icon-btn" id="minimizeBtn" title="Hide to tray">−</button>
+        <button class="icon-btn" id="closeBtn" title="Hide to tray">×</button>
+      </div>
+    </header>
+
+    <section class="presence-section">
+      <div class="presence-orb" id="presenceOrb">
+        <div class="orb-inner" id="orbInner"></div>
+      </div>
+      <div class="presence-meta">
+        <div class="presence-status" id="presenceStatus">idle</div>
+        <div class="presence-expression" id="presenceExpression">neutral</div>
+      </div>
+    </section>
+
+    <section class="capture">
+      <div class="section-label">QUICK CAPTURE</div>
+      <div class="capture-box">
+        <input type="text" id="captureInput" placeholder="Capture a thought or next move…" />
+        <button class="capture-btn" id="captureBtn">+</button>
+      </div>
+      <div class="capture-hint">Ctrl + Alt + A · or type and press Enter</div>
+    </section>
+
+    <section class="status-bar">
+      <div class="status-item">
+        <span class="dot" id="runtimeDot"></span>
+        <span id="runtimeLabel">Runtime: demo ready</span>
+      </div>
+      <div class="status-item">
+        <span id="sessionLabel">No active session</span>
+      </div>
+    </section>
+
+    <footer class="panel-footer">
+      <button class="footer-btn" id="startSessionBtn">Start Voice Session</button>
+      <button class="footer-btn primary" id="openDemoBtn">Run Demo Loop</button>
+    </footer>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>
