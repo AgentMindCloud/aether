@@ -1,4 +1,4 @@
-// Aether shell — P1: Priority + Action Plans + Make it real + IPC client
+// Aether shell — P2: voice path, computer-use execute, Priority, Make it real, IPC
 
 const RUNTIME_URL = 'http://127.0.0.1:7420';
 
@@ -14,42 +14,28 @@ const bookmarkList = document.getElementById('bookmarkList');
 
 let currentPlanBookmark = null;
 let runtimeOnline = false;
+let currentVoiceSession = null;
 
-// Fallback local data (used when runtime is offline)
 let localPriority = [
-  { id: 'p1', title: 'Wire live Grok Voice Think Fast 2.0 path', meta: 'High impact · This week', level: 'high' },
-  { id: 'p2', title: 'Complete typed IPC bridge + first-use magic', meta: 'Architecture · Today', level: 'high' },
+  { id: 'p1', title: 'Connect live Grok Voice Think Fast 2.0 key and run first real session', meta: 'High impact · Now', level: 'high' },
+  { id: 'p2', title: 'Exercise computer-use confirmation once with real screenshot', meta: 'Safety · Today', level: 'high' },
 ];
 
 let localBookmarks = [
   {
-    id: 'b1', category: 'Immediate', title: 'Grok Voice Think Fast 2.0 now live — integrate Realtime path',
-    source: 'x.ai / xAI', score: 9.4,
-    plan: [
-      'Confirm API endpoint + auth for Think Fast 2.0',
-      'Add voice session start + partial transcript handling',
-      'Push presence updates over IPC',
-      'Add graceful fallback when STT confidence < floor'
-    ]
+    id: 'b1', category: 'Immediate', title: 'Grok Voice Think Fast 2.0 — go live with Realtime path',
+    source: 'x.ai', score: 9.5,
+    plan: ['Set GROK_VOICE_API_KEY', 'Start session via /voice/start', 'Drive presence states', 'Confirm text fallback']
   },
   {
-    id: 'b2', category: 'Act soon', title: 'Computer-use tools with spoken confirmation gates',
-    source: 'Aether design', score: 8.7,
-    plan: [
-      'Expose screenshot / window list / type / click from shell',
-      'Require spoken confirmation before mutating actions',
-      'Log every request + confirmation',
-      'Surface confirmation in panel + voice'
-    ]
+    id: 'b2', category: 'Act soon', title: 'Computer-use real surfaces behind spoken gates',
+    source: 'Aether', score: 8.9,
+    plan: ['Shell exposes screenshot', 'Runtime requests → spoken confirm → shell executes', 'Audit every step']
   },
   {
-    id: 'b3', category: 'Possibility', title: 'First-use magic: analyze + 3 next moves',
-    source: 'Aether design', score: 8.1,
-    plan: [
-      'Detect first-run / empty memory',
-      'Offer 3 concrete next moves',
-      'Push accepted move into Priority via Make it real'
-    ]
+    id: 'b3', category: 'Possibility', title: 'Content ideation + smart engagement tools',
+    source: 'Aether', score: 8.3,
+    plan: ['Use /content/ideate', 'Use /content/replies', 'Surface audience insight on first-use']
   }
 ];
 
@@ -59,6 +45,7 @@ function applyPresence(state) {
   presenceOrb.className = 'presence-orb ' + status;
   presenceStatus.textContent = status;
   presenceExpression.textContent = expression + ' · ' + Math.round(intensity * 100) + '%';
+  if (window.aetherAPI) window.aetherAPI.setPresence(state);
 }
 
 async function api(path, options = {}) {
@@ -78,7 +65,9 @@ async function checkRuntime() {
   const health = await api('/health');
   runtimeOnline = !!(health && health.status === 'ok');
   runtimeDot.className = 'dot ' + (runtimeOnline ? 'ok' : 'warn');
-  runtimeLabel.textContent = runtimeOnline ? 'Runtime: connected (:7420)' : 'Runtime: offline (local data)';
+  let label = runtimeOnline ? 'Runtime: connected (:7420)' : 'Runtime: offline (local data)';
+  if (health && health.voice_live) label += ' · voice live';
+  runtimeLabel.textContent = label;
   return runtimeOnline;
 }
 
@@ -86,7 +75,7 @@ function renderPriority(items) {
   const data = items || localPriority;
   priorityList.innerHTML = data.map(item => `
     <li class="priority-item" data-id="${item.id}">
-      <div class="priority-icon ${item.level}">${item.level === 'high' ? '!' : item.level === 'medium' ? '•' : '·'}</div>
+      <div class="priority-icon ${item.level}">${item.level === 'high' ? '!' : '•'}</div>
       <div class="priority-content">
         <div class="priority-title">${item.title}</div>
         <div class="priority-meta">${item.meta || ''}</div>
@@ -129,8 +118,7 @@ function renderBookmarks(items) {
 }
 
 function openPlanModal(id) {
-  const items = localBookmarks;
-  const item = items.find(b => b.id === id);
+  const item = localBookmarks.find(b => b.id === id);
   if (!item || !item.plan) return;
   currentPlanBookmark = item;
   document.getElementById('planTitle').textContent = item.title;
@@ -151,7 +139,6 @@ function closePlanModal() {
 async function confirmMakeReal() {
   if (!currentPlanBookmark) return;
   const id = currentPlanBookmark.id;
-
   if (runtimeOnline) {
     const result = await api('/make-it-real', {
       method: 'POST',
@@ -161,25 +148,19 @@ async function confirmMakeReal() {
       applyPresence(result.presence || { expression: 'pleased', status: 'speaking', intensity: 0.7 });
       sessionLabel.textContent = 'Promoted to Priority';
       const pri = await api('/priority');
-      if (pri && pri.items) {
-        localPriority = pri.items;
-        renderPriority(pri.items);
-      }
+      if (pri && pri.items) { localPriority = pri.items; renderPriority(pri.items); }
     }
   } else {
-    // Local fallback
-    const newItem = {
+    localPriority.unshift({
       id: 'p-' + Date.now(),
       title: currentPlanBookmark.title,
       meta: 'From Bookmark · just now',
       level: 'high'
-    };
-    localPriority.unshift(newItem);
+    });
     renderPriority();
     applyPresence({ expression: 'pleased', status: 'speaking', intensity: 0.7 });
-    sessionLabel.textContent = 'Promoted to Priority (local)';
+    sessionLabel.textContent = 'Promoted (local)';
   }
-
   closePlanModal();
   switchView('priority');
 }
@@ -193,103 +174,114 @@ async function addCapture() {
   const text = captureInput.value.trim();
   if (!text) return;
   captureInput.value = '';
-
   if (runtimeOnline) {
-    await api('/priority/add', {
-      method: 'POST',
-      body: JSON.stringify({ title: text, level: 'high' })
-    });
+    await api('/priority/add', { method: 'POST', body: JSON.stringify({ title: text, level: 'high' }) });
     const pri = await api('/priority');
-    if (pri && pri.items) {
-      localPriority = pri.items;
-      renderPriority(pri.items);
-    }
+    if (pri && pri.items) { localPriority = pri.items; renderPriority(pri.items); }
   } else {
-    localPriority.unshift({
-      id: 'p-' + Date.now(),
-      title: text,
-      meta: 'Just captured · Now',
-      level: 'high'
-    });
+    localPriority.unshift({ id: 'p-' + Date.now(), title: text, meta: 'Just captured · Now', level: 'high' });
     renderPriority();
   }
-  sessionLabel.textContent = 'Captured · just now';
+  sessionLabel.textContent = 'Captured';
   applyPresence({ expression: 'attentive', status: 'thinking', intensity: 0.6 });
-  setTimeout(() => applyPresence({ expression: 'calm', status: 'idle', intensity: 0.5 }), 1800);
+  setTimeout(() => applyPresence({ expression: 'calm', status: 'idle', intensity: 0.5 }), 1600);
 }
 
 async function runFirstUse() {
   applyPresence({ expression: 'thoughtful', status: 'thinking', intensity: 0.7 });
-  sessionLabel.textContent = 'First-use magic…';
-
-  let magic = null;
-  if (runtimeOnline) {
-    magic = await api('/first-use');
-  }
-
+  sessionLabel.textContent = 'First-use…';
+  let magic = runtimeOnline ? await api('/first-use') : null;
   if (!magic) {
     magic = {
-      message: 'Welcome. Here are 3 concrete next moves for Aether.',
       moves: [
-        { title: 'Connect live Grok Voice Think Fast 2.0', why: 'Unlock real-time voice presence' },
-        { title: 'Run computer-use confirmation flow once', why: 'Verify spoken safety gates' },
-        { title: 'Promote one high-score bookmark into Priority', why: 'Exercise Make it real loop' }
+        { title: 'Start a live voice session', why: 'Presence becomes real with voice' },
+        { title: 'Run one computer-use confirmation', why: 'Prove spoken safety gate' },
+        { title: 'Ideate a thread and promote best angle', why: 'Close signal → Priority loop' }
       ],
       presence: { expression: 'pleased', status: 'speaking', intensity: 0.8 }
     };
   }
-
   applyPresence(magic.presence || { expression: 'pleased', status: 'speaking', intensity: 0.8 });
   sessionLabel.textContent = 'First-use ready';
-
-  // Surface moves as temporary priority items if empty-ish
-  if (magic.moves && magic.moves.length) {
-    const movesAsPriority = magic.moves.map((m, i) => ({
-      id: 'fu-' + i,
-      title: m.title,
-      meta: m.why || 'First-use suggestion',
-      level: 'high'
+  if (magic.moves) {
+    const moves = magic.moves.map((m, i) => ({
+      id: 'fu-' + i, title: m.title, meta: m.why || 'Suggestion', level: 'high'
     }));
-    // Show on top without permanently overwriting if runtime is live
-    renderPriority([...movesAsPriority, ...localPriority].slice(0, 6));
+    renderPriority([...moves, ...localPriority].slice(0, 6));
   }
 }
 
 async function startSession() {
   applyPresence({ expression: 'attentive', status: 'listening', intensity: 0.75 });
-  sessionLabel.textContent = 'Session starting…';
-
+  sessionLabel.textContent = 'Starting voice session…';
   if (runtimeOnline) {
-    const sess = await api('/session/start', {
+    const sess = await api('/voice/start', {
       method: 'POST',
       body: JSON.stringify({ user_id: 'local', mode: 'reactive' })
     });
-    if (sess && sess.status === 'session_started') {
-      sessionLabel.textContent = 'Session: ' + (sess.mode || 'reactive');
-      applyPresence({ expression: 'attentive', status: 'listening', intensity: 0.8 });
+    if (sess && (sess.status === 'session_started' || sess.session_id)) {
+      currentVoiceSession = sess.session_id;
+      sessionLabel.textContent = sess.live ? 'Voice live' : 'Voice sim · ' + (sess.mode || 'reactive');
+      applyPresence(sess.presence || { expression: 'attentive', status: 'listening', intensity: 0.8 });
       return;
     }
   }
-
   sessionLabel.textContent = 'Session: local stub';
 }
 
-// Wire events
+/** P2: request screenshot via runtime confirmation then execute on shell */
+async function demoComputerUse() {
+  if (!runtimeOnline) {
+    sessionLabel.textContent = 'Runtime offline — start aether --serve';
+    return;
+  }
+  applyPresence({ expression: 'thoughtful', status: 'thinking', intensity: 0.6 });
+  sessionLabel.textContent = 'Requesting screenshot…';
+  const req = await api('/computer-use/request', {
+    method: 'POST',
+    body: JSON.stringify({ action: 'screenshot', details: { reason: 'panel demo' } })
+  });
+  if (!req || !req.request_id) {
+    sessionLabel.textContent = 'Request failed';
+    return;
+  }
+  sessionLabel.textContent = 'Awaiting confirmation…';
+  // Auto-confirm for demo (in real voice flow this would be spoken)
+  const conf = await api('/computer-use/confirm', {
+    method: 'POST',
+    body: JSON.stringify({ request_id: req.request_id, spoken_yes: true })
+  });
+  if (conf && conf.execute_on_shell && window.aetherAPI) {
+    const result = await window.aetherAPI.executeComputerUse({
+      action: conf.action,
+      details: conf.details
+    });
+    if (result && result.ok) {
+      sessionLabel.textContent = 'Screenshot saved';
+      applyPresence({ expression: 'pleased', status: 'speaking', intensity: 0.75 });
+    } else {
+      sessionLabel.textContent = 'Execute failed: ' + (result && result.error ? result.error : 'unknown');
+    }
+  } else {
+    sessionLabel.textContent = conf ? conf.status : 'Confirm failed';
+  }
+}
+
+// Wire
 document.getElementById('captureBtn').addEventListener('click', addCapture);
 captureInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') addCapture(); });
-
 document.getElementById('closeBtn').addEventListener('click', () => window.close());
 document.getElementById('minimizeBtn').addEventListener('click', () => window.close());
-
 document.getElementById('switchToBookmarks').addEventListener('click', () => switchView('bookmarks'));
 document.getElementById('backToPriority').addEventListener('click', () => switchView('priority'));
-
 document.getElementById('firstUseBtn').addEventListener('click', runFirstUse);
 document.getElementById('startSessionBtn').addEventListener('click', startSession);
-
 document.getElementById('closeModal').addEventListener('click', closePlanModal);
 document.getElementById('cancelPlan').addEventListener('click', closePlanModal);
 document.getElementById('confirmMakeReal').addEventListener('click', confirmMakeReal);
+
+// Double-click presence orb = computer-use demo
+presenceOrb.addEventListener('dblclick', demoComputerUse);
 
 if (window.aetherAPI) {
   window.aetherAPI.onPresenceUpdate((_e, state) => applyPresence(state));
@@ -305,7 +297,6 @@ document.addEventListener('keydown', (e) => {
   if (e.key === 'Escape') closePlanModal();
 });
 
-// Boot
 (async () => {
   await checkRuntime();
   if (runtimeOnline) {
@@ -316,6 +307,5 @@ document.addEventListener('keydown', (e) => {
   }
   renderPriority();
   renderBookmarks();
-  // Re-check every 8s
   setInterval(checkRuntime, 8000);
 })();
