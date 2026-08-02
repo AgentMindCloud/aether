@@ -1,7 +1,8 @@
-"""Aether Voice — Grok Voice Think Fast 2.0 path.
+"""Aether Voice — Grok Voice Think Fast 2.0 + Realtime-oriented path (P3).
 
-Offline-first simulation + live path when GROK_VOICE_API_KEY is present.
-Respects latency budgets and presence state machine from .grok/voice.yaml.
+Offline-first simulation with structure ready for live WebSocket / Realtime API
+when GROK_VOICE_API_KEY is present. Supports partial transcripts and presence
+state machine aligned with .grok/voice.yaml latency budgets.
 """
 
 from __future__ import annotations
@@ -24,19 +25,20 @@ class VoiceSession:
     user_id: str
     mode: str = "reactive"
     started_at: str = field(default_factory=_now)
-    status: str = "active"  # active | idle | ended | fallback_text
+    status: str = "active"  # active | idle | ended | fallback_text | streaming
     presence: dict[str, Any] = field(default_factory=lambda: {
         "expression": "neutral", "status": "idle", "intensity": 0.5
     })
     turns: int = 0
     last_activity: str = field(default_factory=_now)
+    partial_transcript: str = ""
 
 
 class VoiceClient:
-    """Thin client for Grok Voice Think Fast 2.0.
+    """Client for Grok Voice Think Fast 2.0 / Realtime.
 
-    When GROK_VOICE_API_KEY is set, prepares real calls (structure ready).
-    Otherwise runs high-fidelity offline simulation that still drives presence.
+    Live mode prepares the call shape for streaming endpoints.
+    Offline mode still drives presence and short voice-appropriate replies.
     """
 
     def __init__(self) -> None:
@@ -48,11 +50,13 @@ class VoiceClient:
         )
         self.sessions: dict[str, VoiceSession] = {}
         self.engine = "grok-voice-think-fast-2.0"
+        self.realtime_ready = True  # structure present for WS upgrade
 
     def start_session(self, user_id: str, mode: str = "reactive") -> dict[str, Any]:
         sid = f"vs-{uuid.uuid4().hex[:10]}"
         sess = VoiceSession(session_id=sid, user_id=user_id, mode=mode)
         sess.presence = {"expression": "attentive", "status": "listening", "intensity": 0.7}
+        sess.status = "streaming" if self.live else "active"
         self.sessions[sid] = sess
 
         return {
@@ -62,9 +66,29 @@ class VoiceClient:
             "mode": mode,
             "engine": self.engine,
             "live": self.live,
+            "realtime_ready": self.realtime_ready,
             "presence": sess.presence,
             "started_at": sess.started_at,
-            "note": "Live path active" if self.live else "Offline simulation (set GROK_VOICE_API_KEY for live)",
+            "note": (
+                "Live path — connect Realtime / WS endpoint with key"
+                if self.live
+                else "Offline simulation (set GROK_VOICE_API_KEY for live)"
+            ),
+        }
+
+    def partial(self, session_id: str, text: str) -> dict[str, Any]:
+        """Ingest partial STT transcript (for barge-in / live UI)."""
+        sess = self.sessions.get(session_id)
+        if not sess or sess.status == "ended":
+            return {"error": "No active session"}
+        sess.partial_transcript = text
+        sess.presence = {"expression": "attentive", "status": "listening", "intensity": 0.75}
+        sess.last_activity = _now()
+        return {
+            "session_id": session_id,
+            "partial": text[:200],
+            "presence": sess.presence,
+            "timestamp": _now(),
         }
 
     def process_turn(
@@ -80,17 +104,12 @@ class VoiceClient:
 
         sess.turns += 1
         sess.last_activity = _now()
+        sess.partial_transcript = ""
         sess.presence = {"expression": "thoughtful", "status": "thinking", "intensity": 0.65}
 
-        # Simulate latency budget awareness
         t0 = time.perf_counter()
-
-        # Build short voice-appropriate response
         response = self._compose_response(transcript, memory_facts, x_context)
-
-        # Presence → speaking
         sess.presence = {"expression": "attentive", "status": "speaking", "intensity": 0.8}
-
         elapsed_ms = int((time.perf_counter() - t0) * 1000)
 
         result = {
@@ -100,19 +119,17 @@ class VoiceClient:
             "response": response,
             "presence": sess.presence,
             "live": self.live,
+            "realtime_ready": self.realtime_ready,
             "engine": self.engine,
             "latency_ms": elapsed_ms,
             "x_context_items": len(x_context or []),
             "memory_used": len(memory_facts or []),
             "timestamp": _now(),
         }
-
         if self.live:
-            result["note"] = "Would stream to Grok Voice Think Fast 2.0 Realtime API"
-            # Future: actual websocket / HTTP call to voice endpoint here
+            result["note"] = "Stream-ready — wire to Grok Voice Realtime / Think Fast 2.0 endpoint"
         else:
-            result["note"] = "Offline simulation — response ready for TTS playback"
-
+            result["note"] = "Offline simulation — response ready for TTS"
         return result
 
     def end_session(self, session_id: str) -> dict[str, Any]:
@@ -141,7 +158,6 @@ class VoiceClient:
         memory_facts: list[dict] | None,
         x_context: list[dict] | None,
     ) -> str:
-        """Keep under ~35 words for voice."""
         t = transcript.lower()
         if memory_facts:
             return "Got it. I kept the earlier context and stayed under the voice limit."
@@ -151,8 +167,9 @@ class VoiceClient:
             return "I can turn that into a concrete next move. Want me to put it in Priority?"
         if any(w in t for w in ("screenshot", "click", "type", "window")):
             return "I can request that computer action. I will ask for spoken confirmation first."
+        if any(w in t for w in ("thread", "post", "idea", "hook")):
+            return "I can ideate angles for that. Want three hooks now?"
         return "Understood. I am listening."
 
 
-# Singleton for runtime convenience
 voice_client = VoiceClient()
