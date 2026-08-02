@@ -1,10 +1,14 @@
 const { app, BrowserWindow, Tray, Menu, globalShortcut, nativeImage, screen, ipcMain, desktopCapturer } = require('electron');
 const path = require('path');
 const fs = require('fs');
+const { spawn } = require('child_process');
+const http = require('http');
 
 let mainWindow = null;
 let tray = null;
 let isQuitting = false;
+let runtimeProc = null;
+let spawnedByUs = false;
 
 let presenceState = {
   expression: 'neutral',
@@ -17,14 +21,63 @@ function presenceKey(s) {
   return (s.expression || '') + '|' + (s.status || '') + '|' + Math.round((s.intensity || 0) * 100);
 }
 
+function healthCheck() {
+  return new Promise((resolve) => {
+    const req = http.get('http://127.0.0.1:7420/health', { timeout: 1200 }, (res) => {
+      resolve(res.statusCode === 200);
+    });
+    req.on('error', () => resolve(false));
+    req.on('timeout', () => { req.destroy(); resolve(false); });
+  });
+}
+
+function spawnRuntime() {
+  if (runtimeProc) return;
+  const repoRoot = path.join(__dirname, '..');
+  // Prefer `aether --serve`, fall back to python -m
+  const tryCmds = [
+    { cmd: 'aether', args: ['--serve'], shell: true },
+    { cmd: 'python', args: ['-m', 'aether.runtime', '--serve'], shell: true },
+    { cmd: 'py', args: ['-m', 'aether.runtime', '--serve'], shell: true },
+  ];
+  for (const c of tryCmds) {
+    try {
+      runtimeProc = spawn(c.cmd, c.args, {
+        cwd: repoRoot,
+        detached: true,
+        stdio: 'ignore',
+        shell: c.shell,
+        windowsHide: true,
+      });
+      runtimeProc.unref();
+      spawnedByUs = true;
+      console.log('Spawned runtime via', c.cmd);
+      return true;
+    } catch (e) {
+      runtimeProc = null;
+    }
+  }
+  return false;
+}
+
+async function ensureRuntime() {
+  if (await healthCheck()) return { ok: true, already: true };
+  spawnRuntime();
+  for (let i = 0; i < 20; i++) {
+    await new Promise(r => setTimeout(r, 400));
+    if (await healthCheck()) return { ok: true, spawned: true };
+  }
+  return { ok: false, error: 'Runtime did not become healthy on :7420' };
+}
+
 function createWindow() {
   const { width, height } = screen.getPrimaryDisplay().workAreaSize;
 
   mainWindow = new BrowserWindow({
     width: 400,
-    height: 640,
+    height: 680,
     minWidth: 360,
-    minHeight: 480,
+    minHeight: 520,
     show: false,
     frame: false,
     resizable: true,
@@ -41,7 +94,7 @@ function createWindow() {
   mainWindow.loadFile('index.html');
 
   const x = width - 430;
-  const y = Math.max(40, height - 680);
+  const y = Math.max(40, height - 720);
   mainWindow.setPosition(x, y);
 
   mainWindow.once('ready-to-show', () => {
@@ -93,7 +146,6 @@ function registerShortcuts() {
   globalShortcut.register('CommandOrControl+Alt+A', () => showAndFocus());
 }
 
-// Presence: only broadcast when state actually changes (stops IPC thrash)
 ipcMain.on('set-presence', (_e, state) => {
   const next = { ...presenceState, ...state };
   if (presenceKey(next) === presenceKey(presenceState)) return;
@@ -103,9 +155,10 @@ ipcMain.on('set-presence', (_e, state) => {
   }
 });
 ipcMain.handle('get-presence', () => presenceState);
+ipcMain.handle('ensure-runtime', async () => ensureRuntime());
 
 ipcMain.handle('computer-use-execute', async (_e, payload) => {
-  const { action, details } = payload || {};
+  const { action } = payload || {};
   try {
     if (action === 'screenshot') {
       const sources = await desktopCapturer.getSources({
@@ -113,8 +166,7 @@ ipcMain.handle('computer-use-execute', async (_e, payload) => {
         thumbnailSize: { width: 1280, height: 720 }
       });
       if (!sources.length) return { ok: false, error: 'No screen sources' };
-      const primary = sources[0];
-      const png = primary.thumbnail.toPNG();
+      const png = sources[0].thumbnail.toPNG();
       const outDir = path.join(app.getPath('userData'), 'screenshots');
       fs.mkdirSync(outDir, { recursive: true });
       const file = path.join(outDir, `shot-${Date.now()}.png`);
@@ -122,20 +174,21 @@ ipcMain.handle('computer-use-execute', async (_e, payload) => {
       return { ok: true, action: 'screenshot', path: file, size: png.length };
     }
     if (action === 'list_windows') {
-      const displays = screen.getAllDisplays().map(d => ({
-        id: d.id,
-        bounds: d.bounds,
-        scaleFactor: d.scaleFactor
-      }));
-      return { ok: true, action: 'list_windows', displays };
+      return {
+        ok: true,
+        action: 'list_windows',
+        displays: screen.getAllDisplays().map(d => ({ id: d.id, bounds: d.bounds }))
+      };
     }
-    return { ok: false, error: `Action not implemented in shell yet: ${action}` };
+    return { ok: false, error: `Action not implemented: ${action}` };
   } catch (err) {
     return { ok: false, error: String(err) };
   }
 });
 
-app.whenReady().then(() => {
+app.whenReady().then(async () => {
+  // Fire-and-forget ensure so UI opens fast
+  ensureRuntime().catch(() => {});
   createWindow();
   createTray();
   registerShortcuts();
@@ -146,4 +199,8 @@ app.whenReady().then(() => {
 
 app.on('window-all-closed', () => {});
 app.on('will-quit', () => globalShortcut.unregisterAll());
-app.on('before-quit', () => { isQuitting = true; });
+app.on('before-quit', () => {
+  isQuitting = true;
+  // Leave runtime running so mobile / other clients can use it later.
+  // Only kill if we want strict single-app lifecycle — currently we keep it.
+});

@@ -5,5 +5,6 @@ contextBridge.exposeInMainWorld('aetherAPI', {
   onPresenceUpdate: (callback) => ipcRenderer.on('presence-update', callback),
   setPresence: (state) => ipcRenderer.send('set-presence', state),
   getPresence: () => ipcRenderer.invoke('get-presence'),
+  ensureRuntime: () => ipcRenderer.invoke('ensure-runtime'),
   executeComputerUse: (payload) => ipcRenderer.invoke('computer-use-execute', payload)
 });
