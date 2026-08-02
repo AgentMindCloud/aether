@@ -1,0 +1,30 @@
+# LLM Abstraction Layer — hot-swappable without rebuild
+models:
+  default: grok-4.20-multi-agent
+  # Ready for 4.6 / 4.7 / 5.0 — change default or use /switch-model
+
+  providers:
+    xai:
+      base_url: https://api.x.ai/v1
+      env_key: XAI_API_KEY
+      models:
+        - id: grok-4.20-multi-agent
+          label: Grok 4.20 Multi-Agent
+        - id: grok-4.6
+          label: Grok 4.6 (when available)
+        - id: grok-4.7
+          label: Grok 4.7 (when available)
+
+  voice:
+    engine: grok-voice-think-fast-2.0
+    env_key: GROK_VOICE_API_KEY
+
+  fallback_chain:
+    - grok-4.20-multi-agent
+    - grok-4.6
+    # local model slot reserved
+
+  hot_swap:
+    enabled: true
+    endpoint: /switch-model
+    require_restart: false

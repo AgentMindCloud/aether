@@ -1,10 +1,9 @@
 tools:
+  # --- Core ---
   x_search:
     default_recency_hours: 6
     default_lang: auto
-    exclude:
-      - replies
-      - retweets
+    exclude: [replies, retweets]
     max_results: 12
     description: Pull live X context for the current conversation turn.
 
@@ -27,52 +26,74 @@ tools:
   update_presence:
     description: Update the reactive visual presence expression and status.
     parameters:
-      expression:
-        type: string
-        enum: [calm, attentive, thoughtful, pleased, concerned, neutral]
-      status:
-        type: string
-        enum: [listening, thinking, speaking, idle, proactive]
-      intensity:
-        type: number
-        minimum: 0
-        maximum: 1
+      expression: { type: string, enum: [calm, attentive, thoughtful, pleased, concerned, neutral] }
+      status: { type: string, enum: [listening, thinking, speaking, idle, proactive] }
+      intensity: { type: number, minimum: 0, maximum: 1 }
 
   computer_use_request:
     description: Request a computer-use action. Always requires spoken confirmation before execution.
     parameters:
-      action:
-        type: string
-        enum: [screenshot, list_windows, focus_window, type_text, click, move_mouse]
-      details:
-        type: object
+      action: { type: string, enum: [screenshot, list_windows, focus_window, type_text, click, move_mouse] }
+      details: { type: object }
     safety:
       require_spoken_confirmation: true
 
   computer_use_confirm:
     description: Confirm and execute a previously requested computer-use action after spoken user approval.
 
+  # --- Content ---
   content_ideate:
     description: Generate thread angles and hooks for a topic.
     parameters:
-      topic:
-        type: string
-      voice:
-        type: string
+      topic: { type: string }
+      voice: { type: string }
 
   content_replies:
     description: Draft short high-signal reply options for a post.
     parameters:
-      post:
-        type: string
-      voice:
-        type: string
+      post: { type: string }
+      voice: { type: string }
 
   audience_insight:
     description: Quick niche / audience signal snapshot.
     parameters:
-      niche:
-        type: string
+      niche: { type: string }
+
+  # --- GitHub (first-class for builders) ---
+  github_list_issues:
+    description: List open issues for a repo (owner/repo).
+    parameters:
+      owner: { type: string }
+      repo: { type: string }
+      state: { type: string, enum: [open, closed, all], default: open }
+
+  github_create_issue:
+    description: Create an issue. Requires confirmation for mutating actions.
+    parameters:
+      owner: { type: string }
+      repo: { type: string }
+      title: { type: string }
+      body: { type: string }
+    safety:
+      require_spoken_or_ui_confirmation: true
+
+  github_list_prs:
+    description: List pull requests for a repo.
+    parameters:
+      owner: { type: string }
+      repo: { type: string }
+      state: { type: string, enum: [open, closed, all], default: open }
+
+  # --- Optional external orchestration ---
+  n8n_webhook:
+    description: Call an optional external n8n webhook (orchestration only — never the brain).
+    parameters:
+      url: { type: string }
+      payload: { type: object }
+      method: { type: string, enum: [POST, GET], default: POST }
+    safety:
+      require_user_configured_url: true
+      never_default_to_external_memory: true
 
   voice_stt:
     engine: grok-stt-2
