@@ -1,9 +1,7 @@
-"""Aether runtime — P0/P1/P2.
+"""Aether runtime — P0 → P3.
 
-P0: presence loop demo
-P1: first-use, computer-use gates, Action Plan, IPC server
-P2: Voice Think Fast 2.0 path, governed memory store, content tools,
-    stronger first-use, proactive stubs, richer IPC
+P3 adds: encrypted memory, proactive engine, voice partials / realtime structure,
+richer IPC, packaging readiness.
 """
 
 from __future__ import annotations
@@ -21,11 +19,11 @@ from urllib.parse import urlparse
 
 from aether.voice import voice_client
 from aether.memory import memory_store
+from aether.proactive import proactive_engine
 from aether import content as content_tools
 
-# ---------------------------------------------------------------------------
-# Utilities
-# ---------------------------------------------------------------------------
+VERSION = "0.3.0"
+
 
 def check_kill_switch() -> None:
     if os.getenv("AETHER_DISABLED") == "1":
@@ -57,14 +55,10 @@ def _now_iso() -> str:
     return datetime.now(timezone.utc).isoformat()
 
 
-# ---------------------------------------------------------------------------
-# Priority / Bookmarks (still in-memory for speed; memory_store is for facts)
-# ---------------------------------------------------------------------------
-
 _PRIORITY: list[dict[str, Any]] = [
     {
         "id": "p1",
-        "title": "Connect live Grok Voice Think Fast 2.0 key and run first real session",
+        "title": "Run first live voice session with Think Fast 2.0 key",
         "meta": "High impact · Now",
         "level": "high",
         "source": "system",
@@ -72,9 +66,9 @@ _PRIORITY: list[dict[str, Any]] = [
     },
     {
         "id": "p2",
-        "title": "Exercise computer-use confirmation once with real screenshot",
+        "title": "Confirm encrypted memory + opt into proactive",
         "meta": "Safety · Today",
-        "level": "high",
+        "level": "medium",
         "source": "system",
         "created_at": _now_iso(),
     },
@@ -84,38 +78,38 @@ _BOOKMARKS: list[dict[str, Any]] = [
     {
         "id": "b1",
         "category": "Immediate",
-        "title": "Grok Voice Think Fast 2.0 — go live with Realtime path",
+        "title": "Grok Voice Realtime path — stream first session",
         "source": "x.ai",
-        "score": 9.5,
+        "score": 9.6,
         "plan": [
             "Set GROK_VOICE_API_KEY",
-            "Start session via /voice/start",
-            "Drive presence listening → thinking → speaking",
-            "Confirm fallback to text when needed",
+            "aether --serve + shell",
+            "Start voice session and verify presence states",
+            "Test partial transcript path",
         ],
     },
     {
         "id": "b2",
         "category": "Act soon",
-        "title": "Computer-use real surfaces behind spoken gates",
+        "title": "Proactive opt-in + first mention-spike offer",
         "source": "Aether",
-        "score": 8.9,
+        "score": 8.8,
         "plan": [
-            "Shell exposes screenshot via desktopCapturer",
-            "Runtime requests → spoken confirm → shell executes",
-            "Audit every request and confirmation",
+            "POST /proactive/opt-in",
+            "Feed sample signals to /proactive/evaluate",
+            "Accept one offer into Priority",
         ],
     },
     {
         "id": "b3",
         "category": "Possibility",
-        "title": "Content ideation + smart engagement tools",
+        "title": "Package shell with electron-builder",
         "source": "Aether",
-        "score": 8.3,
+        "score": 8.0,
         "plan": [
-            "Use /content/ideate for thread angles",
-            "Use /content/replies for high-signal replies",
-            "Surface audience insight on first-use",
+            "cd shell && npm run dist",
+            "Verify tray app on target OS",
+            "Document unsigned-build warning",
         ],
     },
 ]
@@ -126,13 +120,9 @@ _AUDIT: list[dict[str, Any]] = []
 
 def _audit(event: str, payload: dict[str, Any]) -> None:
     _AUDIT.append({"event": event, "at": _now_iso(), **payload})
-    if len(_AUDIT) > 200:
-        _AUDIT.pop(0)
+    if len(_AUDIT) > 300:
+        del _AUDIT[:50]
 
-
-# ---------------------------------------------------------------------------
-# Core session / turn (now voice-aware)
-# ---------------------------------------------------------------------------
 
 def start_voice_session(user_id: str, mode: str = "reactive") -> dict[str, Any]:
     check_kill_switch()
@@ -147,27 +137,16 @@ def handle_turn(
     x_context: list[dict] | None = None,
 ) -> dict[str, Any]:
     check_kill_switch()
-    # Pull governed memory
     memories = memory_store.query(transcript, max_records=3)
-    if not memories:
-        # seed a couple of useful defaults on first real use
-        memories = [
-            {
-                "content": "User prefers short, calm voice answers under 35 words.",
-                "source": "user_said",
-                "confidence": 0.9,
-                "scope": "session",
-                "retention_days": 0,
-                "write_permission": "user_only",
-                "created_at": _now_iso(),
-                "last_accessed": _now_iso(),
-            }
-        ]
-
     result = voice_client.process_turn(session_id, transcript, x_context, memories)
     result["memory_contracts"] = memories
     _audit("turn", {"session_id": session_id, "turns": result.get("turn")})
     return result
+
+
+def handle_partial(session_id: str, text: str) -> dict[str, Any]:
+    check_kill_switch()
+    return voice_client.partial(session_id, text)
 
 
 def update_presence(expression: str, status: str, intensity: float = 0.7) -> dict[str, Any]:
@@ -188,51 +167,26 @@ def update_presence(expression: str, status: str, intensity: float = 0.7) -> dic
     }
 
 
-# ---------------------------------------------------------------------------
-# First-use (stronger)
-# ---------------------------------------------------------------------------
-
 def first_use_magic(user_id: str = "local") -> dict[str, Any]:
     check_kill_switch()
     insight = content_tools.audience_insight()
     moves = [
-        {
-            "id": "m1",
-            "title": "Start a live voice session with Think Fast 2.0",
-            "why": "Presence becomes real the moment voice is connected",
-            "effort": "low",
-            "impact": "high",
-        },
-        {
-            "id": "m2",
-            "title": "Run one computer-use confirmation (screenshot)",
-            "why": "Prove the spoken safety gate before any mutating tool",
-            "effort": "low",
-            "impact": "high",
-        },
-        {
-            "id": "m3",
-            "title": "Ideate one thread and promote the best angle to Priority",
-            "why": "Close the loop from signal → action plan → Priority",
-            "effort": "low",
-            "impact": "medium",
-        },
+        {"id": "m1", "title": "Start a live voice session", "why": "Presence becomes real with voice", "effort": "low", "impact": "high"},
+        {"id": "m2", "title": "Opt into proactive + run evaluate once", "why": "Unlock mention-spike offers", "effort": "low", "impact": "high"},
+        {"id": "m3", "title": "Confirm memory encryption + take one screenshot", "why": "Safety + computer-use gate verified", "effort": "low", "impact": "medium"},
     ]
     return {
         "type": "first_use_magic",
         "user_id": user_id,
-        "message": "Welcome. Here is a quick signal snapshot and three concrete next moves.",
+        "message": "Welcome. Signal snapshot and three concrete next moves.",
         "audience_insight": insight,
         "moves": moves,
         "presence": {"expression": "pleased", "status": "speaking", "intensity": 0.8},
         "memory_stats": memory_store.stats(),
+        "proactive": proactive_engine.status(),
         "timestamp": _now_iso(),
     }
 
-
-# ---------------------------------------------------------------------------
-# Computer-use (still gated; shell will execute real surfaces)
-# ---------------------------------------------------------------------------
 
 def computer_use_request(action: str, details: dict[str, Any] | None = None) -> dict[str, Any]:
     global _PENDING_COMPUTER_USE
@@ -240,7 +194,6 @@ def computer_use_request(action: str, details: dict[str, Any] | None = None) -> 
     allowed = {"screenshot", "list_windows", "focus_window", "type_text", "click", "move_mouse"}
     if action not in allowed:
         return {"error": f"Unknown action: {action}", "allowed": list(allowed)}
-
     request_id = str(uuid.uuid4())[:8]
     _PENDING_COMPUTER_USE = {
         "request_id": request_id,
@@ -266,10 +219,8 @@ def computer_use_confirm(request_id: str, spoken_yes: bool = True) -> dict[str, 
     check_kill_switch()
     if not _PENDING_COMPUTER_USE or _PENDING_COMPUTER_USE["request_id"] != request_id:
         return {"error": "No matching pending computer-use request", "request_id": request_id}
-
     pending = _PENDING_COMPUTER_USE
     _PENDING_COMPUTER_USE = None
-
     if not spoken_yes:
         _audit("computer_use_cancelled", {"request_id": request_id})
         return {
@@ -279,8 +230,6 @@ def computer_use_confirm(request_id: str, spoken_yes: bool = True) -> dict[str, 
             "message": "Cancelled. No changes made.",
             "timestamp": _now_iso(),
         }
-
-    # P2: signal to shell that it may now execute the real surface
     result = {
         "status": "confirmed_execute",
         "request_id": request_id,
@@ -294,10 +243,6 @@ def computer_use_confirm(request_id: str, spoken_yes: bool = True) -> dict[str, 
     _audit("computer_use_confirmed", {"request_id": request_id, "action": pending["action"]})
     return result
 
-
-# ---------------------------------------------------------------------------
-# Action Plan / Priority
-# ---------------------------------------------------------------------------
 
 def list_priority() -> list[dict[str, Any]]:
     return list(_PRIORITY)
@@ -346,68 +291,61 @@ def add_priority(title: str, level: str = "high") -> dict[str, Any]:
     return {"status": "added", "item": item}
 
 
-# ---------------------------------------------------------------------------
-# Demo
-# ---------------------------------------------------------------------------
-
 def run_demo() -> None:
     print("\n════════════════════════════════════════════════════════════")
-    print("  AETHER  ·  P2 demo  ·  no API keys required")
+    print(f"  AETHER  ·  P3 demo  ·  v{VERSION}")
     print("════════════════════════════════════════════════════════════\n")
 
     print("→ Kill switch …")
     check_kill_switch()
     print("  ✓ clear\n")
 
-    print("→ Voice session (Think Fast 2.0 path) …")
+    print("→ Voice session (Realtime-ready path) …")
     sess = start_voice_session("demo-user")
     print(json.dumps(sess, indent=2), "\n")
 
-    print("→ First-use magic + audience insight …")
+    print("→ Partial transcript …")
+    print(json.dumps(handle_partial(sess["session_id"], "I want to"), indent=2), "\n")
+
+    print("→ First-use + proactive status …")
     print(json.dumps(first_use_magic(), indent=2), "\n")
 
-    print("→ Governed memory write + query …")
+    print("→ Memory write (encrypted if cryptography present) …")
     memory_store.write({
         "content": "User prefers short calm voice answers under 35 words.",
         "source": "user_said",
-        "confidence": 0.93,
+        "confidence": 0.94,
         "scope": "session",
         "retention_days": 0,
         "write_permission": "user_only",
         "created_at": _now_iso(),
         "last_accessed": _now_iso(),
     })
-    print(json.dumps(memory_store.query("prefer short voice"), indent=2), "\n")
+    print(json.dumps(memory_store.stats(), indent=2), "\n")
 
     print("→ Voice turn …")
-    turn = handle_turn(sess["session_id"], "Remember I like short answers. What should I do next?")
-    print(json.dumps(turn, indent=2), "\n")
+    print(json.dumps(handle_turn(sess["session_id"], "Remember I like short answers. Next move?"), indent=2), "\n")
+
+    print("→ Proactive opt-in + evaluate …")
+    proactive_engine.set_opt_in(True)
+    print(json.dumps(proactive_engine.evaluate({"mention_count_15m": 7}), indent=2), "\n")
 
     print("→ Content ideation …")
-    print(json.dumps(content_tools.ideate_thread("governed memory contracts"), indent=2), "\n")
+    print(json.dumps(content_tools.ideate_thread("presence agents"), indent=2), "\n")
 
-    print("→ Computer-use request + spoken confirm …")
-    req = computer_use_request("screenshot", {"reason": "P2 demo"})
+    print("→ Computer-use request + confirm …")
+    req = computer_use_request("screenshot", {"reason": "P3"})
     print(json.dumps(req, indent=2))
-    conf = computer_use_confirm(req["request_id"], True)
-    print(json.dumps(conf, indent=2), "\n")
+    print(json.dumps(computer_use_confirm(req["request_id"], True), indent=2), "\n")
 
     print("→ Make it real …")
     print(json.dumps(make_it_real("b1"), indent=2), "\n")
 
-    print("→ Memory stats …")
-    print(json.dumps(memory_store.stats(), indent=2), "\n")
-
     print("════════════════════════════════════════════════════════════")
-    print("  P2 demo complete.")
-    print("  Voice path · governed memory · content tools · computer-use gates")
-    print("  aether --serve  →  shell connects on :7420")
+    print("  P3 demo complete.")
+    print("  Encrypted memory · proactive · voice partials · packaging ready")
     print("════════════════════════════════════════════════════════════\n")
 
-
-# ---------------------------------------------------------------------------
-# IPC server
-# ---------------------------------------------------------------------------
 
 class AetherHandler(BaseHTTPRequestHandler):
     def _json(self, code: int, payload: Any) -> None:
@@ -433,10 +371,12 @@ class AetherHandler(BaseHTTPRequestHandler):
             if path == "/health":
                 self._json(200, {
                     "status": "ok",
-                    "version": "0.2.0",
-                    "p": "P2",
+                    "version": VERSION,
+                    "p": "P3",
                     "voice_live": voice_client.live,
+                    "realtime_ready": voice_client.realtime_ready,
                     "memory": memory_store.stats(),
+                    "proactive": proactive_engine.status(),
                 })
             elif path == "/priority":
                 self._json(200, {"items": list_priority()})
@@ -448,8 +388,10 @@ class AetherHandler(BaseHTTPRequestHandler):
                 self._json(200, first_use_magic())
             elif path == "/memory/stats":
                 self._json(200, memory_store.stats())
+            elif path == "/proactive/status":
+                self._json(200, proactive_engine.status())
             elif path == "/audit":
-                self._json(200, {"events": _AUDIT[-30:]})
+                self._json(200, {"events": _AUDIT[-40:]})
             else:
                 self._json(404, {"error": "not found"})
         except RuntimeError as e:
@@ -470,26 +412,17 @@ class AetherHandler(BaseHTTPRequestHandler):
             if path in ("/session/start", "/voice/start"):
                 self._json(200, start_voice_session(data.get("user_id", "local"), data.get("mode", "reactive")))
             elif path in ("/turn", "/voice/turn"):
-                self._json(200, handle_turn(
-                    data.get("session_id", ""),
-                    data.get("transcript", ""),
-                    data.get("x_context"),
-                ))
+                self._json(200, handle_turn(data.get("session_id", ""), data.get("transcript", ""), data.get("x_context")))
+            elif path == "/voice/partial":
+                self._json(200, handle_partial(data.get("session_id", ""), data.get("text", "")))
             elif path == "/voice/end":
                 self._json(200, voice_client.end_session(data.get("session_id", "")))
             elif path == "/presence":
-                self._json(200, update_presence(
-                    data.get("expression", "neutral"),
-                    data.get("status", "idle"),
-                    float(data.get("intensity", 0.7)),
-                ))
+                self._json(200, update_presence(data.get("expression", "neutral"), data.get("status", "idle"), float(data.get("intensity", 0.7))))
             elif path == "/computer-use/request":
                 self._json(200, computer_use_request(data.get("action", "screenshot"), data.get("details")))
             elif path == "/computer-use/confirm":
-                self._json(200, computer_use_confirm(
-                    data.get("request_id", ""),
-                    bool(data.get("spoken_yes", True)),
-                ))
+                self._json(200, computer_use_confirm(data.get("request_id", ""), bool(data.get("spoken_yes", True))))
             elif path == "/make-it-real":
                 self._json(200, make_it_real(data.get("bookmark_id", "")))
             elif path == "/priority/add":
@@ -500,6 +433,10 @@ class AetherHandler(BaseHTTPRequestHandler):
                 self._json(200, {"facts": memory_store.query(data.get("text", ""), data.get("max", 3))})
             elif path == "/memory/consent":
                 self._json(200, memory_store.set_cross_session_consent(bool(data.get("granted", False))))
+            elif path == "/proactive/opt-in":
+                self._json(200, proactive_engine.set_opt_in(bool(data.get("opted_in", True))))
+            elif path == "/proactive/evaluate":
+                self._json(200, proactive_engine.evaluate(data.get("signals") or data))
             elif path == "/content/ideate":
                 self._json(200, content_tools.ideate_thread(data.get("topic", "AI agents"), data.get("voice", "builder")))
             elif path == "/content/replies":
@@ -518,8 +455,8 @@ class AetherHandler(BaseHTTPRequestHandler):
 def run_serve(host: str = "127.0.0.1", port: int = 7420) -> None:
     check_kill_switch()
     server = HTTPServer((host, port), AetherHandler)
-    print(f"Aether P2 IPC on http://{host}:{port}")
-    print("Voice · Memory · Content · Computer-use · Priority · Audit")
+    print(f"Aether P3 IPC on http://{host}:{port}  (v{VERSION})")
+    print("Voice · Memory(encrypted) · Proactive · Content · Computer-use · Audit")
     print("Ctrl+C to stop.\n")
     try:
         server.serve_forever()
@@ -549,6 +486,7 @@ def main() -> None:
             print("Environment OK:")
             for k, v in found.items():
                 print(f"  {k}: {v}")
+            print("Memory:", memory_store.stats())
         except EnvironmentError as e:
             print(e, file=sys.stderr)
             sys.exit(1)
@@ -563,9 +501,10 @@ def main() -> None:
         return
 
     parser.print_help()
-    print("\n  aether --demo")
+    print(f"\n  aether --demo          # P3 offline loop (v{VERSION})")
     print("  aether --serve")
     print("  cd shell && npm start")
+    print("  cd shell && npm run dist   # package with electron-builder")
 
 
 if __name__ == "__main__":
