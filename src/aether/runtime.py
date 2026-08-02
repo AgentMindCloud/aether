@@ -1,7 +1,6 @@
-"""Aether runtime — P0 → P5.
+"""Aether runtime — P0 → P5.1
 
-P5: Postgres memory (primary), file fallback, learning (feedback/distill),
-Ollama local models, long-horizon durability.
+P5.1: talk-friendly defaults, softer priority levels, optional bind host for mobile LAN.
 """
 
 from __future__ import annotations
@@ -25,7 +24,7 @@ from aether import github_tools
 from aether import learning
 from aether.ollama_client import ollama
 
-VERSION = "0.5.0"
+VERSION = "0.5.1"
 
 
 def check_kill_switch() -> None:
@@ -56,15 +55,15 @@ def _now_iso() -> str:
 
 
 _PRIORITY: list[dict[str, Any]] = [
-    {"id": "p1", "title": "Enable cross-session consent + first distill", "meta": "Memory · Now", "level": "high", "source": "system", "created_at": _now_iso()},
-    {"id": "p2", "title": "Confirm Postgres backend + Ollama status", "meta": "Infra · Today", "level": "high", "source": "system", "created_at": _now_iso()},
+    {"id": "p1", "title": "Start Session and type a message", "meta": "Talk loop · Now", "level": "medium", "source": "system", "created_at": _now_iso()},
+    {"id": "p2", "title": "Optional: set GROK_VOICE_API_KEY for live voice", "meta": "Later", "level": "low", "source": "system", "created_at": _now_iso()},
 ]
 
 _BOOKMARKS: list[dict[str, Any]] = [
     {
-        "id": "b1", "category": "Immediate", "title": "Long-term memory online (Postgres + learning)",
-        "source": "Aether P5", "score": 9.7,
-        "plan": ["pip install -e .[db,crypto]", "aether --demo", "Confirm backend=postgres"],
+        "id": "b1", "category": "Immediate", "title": "Talk path is live (text now, voice when keyed)",
+        "source": "Aether", "score": 9.4,
+        "plan": ["Start Session", "Type in the box", "Read reply in SESSION"],
     },
 ]
 
@@ -130,11 +129,11 @@ def first_use_magic(user_id: str = "local") -> dict[str, Any]:
     check_kill_switch()
     return {
         "type": "first_use_magic",
-        "message": "Long-horizon memory and learning are online. Three moves.",
+        "message": "Ready. Start Session, then type a message.",
         "moves": [
-            {"id": "m1", "title": "Grant cross-session consent", "why": "Unlock remember-across-sessions", "effort": "low", "impact": "high"},
-            {"id": "m2", "title": "Write a preference + give feedback later", "why": "Starts the learning loop", "effort": "low", "impact": "high"},
-            {"id": "m3", "title": "Check Ollama + Postgres health", "why": "Confirm local stack", "effort": "low", "impact": "medium"},
+            {"id": "m1", "title": "Start Session and type a message", "why": "Talk loop works now", "effort": "low", "impact": "high"},
+            {"id": "m2", "title": "Optional live voice key later", "why": "Same path, real TTS/STT", "effort": "low", "impact": "medium"},
+            {"id": "m3", "title": "Mobile later uses same HTTP API", "why": "One brain, many surfaces", "effort": "low", "impact": "medium"},
         ],
         "memory": memory_store.stats(),
         "ollama": ollama.status(),
@@ -198,12 +197,12 @@ def make_it_real(bookmark_id: str) -> dict[str, Any]:
     bm = next((b for b in _BOOKMARKS if b["id"] == bookmark_id), None)
     if not bm:
         return {"error": f"Bookmark {bookmark_id} not found"}
-    item = {"id": f"p-{uuid.uuid4().hex[:6]}", "title": bm["title"], "meta": f"From Bookmark · just now", "level": "high", "source": "make_it_real", "plan": bm.get("plan", []), "created_at": _now_iso()}
+    item = {"id": f"p-{uuid.uuid4().hex[:6]}", "title": bm["title"], "meta": f"From Bookmark · just now", "level": "medium", "source": "make_it_real", "plan": bm.get("plan", []), "created_at": _now_iso()}
     _PRIORITY.insert(0, item)
     return {"status": "promoted", "priority_item": item, "timestamp": _now_iso()}
 
 
-def add_priority(title: str, level: str = "high") -> dict[str, Any]:
+def add_priority(title: str, level: str = "medium") -> dict[str, Any]:
     item = {"id": f"p-{uuid.uuid4().hex[:6]}", "title": title, "meta": "Captured · Now", "level": level, "source": "capture", "created_at": _now_iso()}
     _PRIORITY.insert(0, item)
     return {"status": "added", "item": item}
@@ -211,67 +210,12 @@ def add_priority(title: str, level: str = "high") -> dict[str, Any]:
 
 def run_demo() -> None:
     print("\n════════════════════════════════════════════════════════════")
-    print(f"  AETHER  ·  P5 learning path  ·  v{VERSION}")
+    print(f"  AETHER  ·  P5.1  ·  v{VERSION}")
     print("════════════════════════════════════════════════════════════\n")
     check_kill_switch()
-
-    print("→ 0. Memory + Ollama health")
-    stats = memory_store.stats()
-    print(json.dumps(stats, indent=2))
-    print(json.dumps(ollama.status(), indent=2), "\n")
-    if stats.get("backend") != "postgres":
-        print("  ⚠ backend is not postgres — check DSN / psycopg / Postgres is running\n")
-    else:
-        print("  ✓ Postgres backend active\n")
-
-    print("→ 1. Grant cross-session consent")
-    consent = memory_store.set_cross_session_consent(True)
-    print(json.dumps(consent, indent=2), "\n")
-
-    print("→ 2. Write preference (user scope) + session fact")
-    user_fact = memory_store.write({
-        "content": "User prefers short calm voice answers and concrete next actions.",
-        "source": "user_said",
-        "confidence": 0.92,
-        "scope": "user",
-        "retention_days": 365,
-        "write_permission": "user_only",
-        "created_at": _now_iso(),
-        "last_accessed": _now_iso(),
-    })
-    session_fact = memory_store.write({
-        "content": "In this session user confirmed Postgres memory path and wants learning loop active.",
-        "source": "derived",
-        "confidence": 0.88,
-        "scope": "session",
-        "retention_days": 0,
-        "write_permission": "user_only",
-        "created_at": _now_iso(),
-        "last_accessed": _now_iso(),
-    })
-    print("user_fact:", json.dumps(user_fact, indent=2))
-    print("session_fact:", json.dumps(session_fact, indent=2), "\n")
-
-    print("→ 3. Feedback (learning signal on user_fact)")
-    fb = learning.record_feedback(user_fact["id"], True, "accurate preference")
-    print(json.dumps(fb, indent=2), "\n")
-
-    print("→ Query (should retrieve preference)")
-    print(json.dumps(memory_store.query("calm voice"), indent=2), "\n")
-
-    print("→ Distill (promote high-confidence session → user)")
-    print(json.dumps(learning.distill(max_facts=3, min_confidence=0.7), indent=2), "\n")
-
-    print("→ Final memory stats")
-    print(json.dumps(memory_store.stats(), indent=2), "\n")
-
-    print("→ First-use snapshot")
-    print(json.dumps(first_use_magic(), indent=2), "\n")
-
-    print("════════════════════════════════════════════════════════════")
-    print("  Tasks 1–3 complete: consent · write · feedback (+ distill)")
-    print("  Expect backend=postgres and rising user_facts count.")
-    print("════════════════════════════════════════════════════════════\n")
+    print(json.dumps(memory_store.stats(), indent=2))
+    print(json.dumps(first_use_magic(), indent=2))
+    print("OK\n")
 
 
 class AetherHandler(BaseHTTPRequestHandler):
@@ -297,7 +241,7 @@ class AetherHandler(BaseHTTPRequestHandler):
             check_kill_switch()
             if path == "/health":
                 self._json(200, {
-                    "status": "ok", "version": VERSION, "p": "P5",
+                    "status": "ok", "version": VERSION, "p": "P5.1",
                     "voice_live": voice_client.live,
                     "memory": memory_store.stats(),
                     "ollama": ollama.status(),
@@ -358,7 +302,7 @@ class AetherHandler(BaseHTTPRequestHandler):
             elif path == "/make-it-real":
                 self._json(200, make_it_real(data.get("bookmark_id", "")))
             elif path == "/priority/add":
-                self._json(200, add_priority(data.get("title", "Untitled"), data.get("level", "high")))
+                self._json(200, add_priority(data.get("title", "Untitled"), data.get("level", "medium")))
             elif path == "/memory/write":
                 self._json(200, memory_store.write(data))
             elif path == "/memory/query":
@@ -398,10 +342,12 @@ class AetherHandler(BaseHTTPRequestHandler):
         pass
 
 
-def run_serve(host: str = "127.0.0.1", port: int = 7420) -> None:
+def run_serve(host: str | None = None, port: int = 7420) -> None:
     check_kill_switch()
+    host = host or os.getenv("AETHER_HOST", "127.0.0.1")
+    # For phone access on LAN later: AETHER_HOST=0.0.0.0
     server = HTTPServer((host, port), AetherHandler)
-    print(f"Aether P5 IPC http://{host}:{port}  v{VERSION}")
+    print(f"Aether P5.1 IPC http://{host}:{port}  v{VERSION}")
     print(f"Memory backend: {memory_store.stats().get('backend')} | Ollama: {ollama.available}")
     print("Ctrl+C to stop.\n")
     try:
@@ -418,12 +364,13 @@ def main() -> None:
     parser.add_argument("--session", metavar="USER_ID")
     parser.add_argument("--serve", action="store_true")
     parser.add_argument("--port", type=int, default=7420)
+    parser.add_argument("--host", default=None, help="Bind host (default 127.0.0.1; use 0.0.0.0 for LAN/mobile)")
     args = parser.parse_args()
     if args.demo:
         run_demo()
         return
     if args.serve:
-        run_serve(port=args.port)
+        run_serve(host=args.host, port=args.port)
         return
     if args.check_env:
         try:
@@ -446,9 +393,6 @@ def main() -> None:
             sys.exit(1)
         return
     parser.print_help()
-    print(f"\n  pip install -e \".[db,crypto]\"")
-    print(f"  aether --demo                 # learning path (v{VERSION})")
-    print("  aether --serve")
 
 
 if __name__ == "__main__":
