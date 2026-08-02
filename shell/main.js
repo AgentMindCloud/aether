@@ -23,7 +23,7 @@ function presenceKey(s) {
 
 function healthCheck() {
   return new Promise((resolve) => {
-    const req = http.get('http://127.0.0.1:7420/health', { timeout: 1200 }, (res) => {
+    const req = http.get('http://127.0.0.1:7420/health', { timeout: 1500 }, (res) => {
       resolve(res.statusCode === 200);
     });
     req.on('error', () => resolve(false));
@@ -32,42 +32,58 @@ function healthCheck() {
 }
 
 function spawnRuntime() {
-  if (runtimeProc) return;
+  if (runtimeProc) return true;
   const repoRoot = path.join(__dirname, '..');
-  // Prefer `aether --serve`, fall back to python -m
+  const srcPath = path.join(repoRoot, 'src');
+
+  // Ordered fallbacks for Windows + PATH friction
   const tryCmds = [
-    { cmd: 'aether', args: ['--serve'], shell: true },
-    { cmd: 'python', args: ['-m', 'aether.runtime', '--serve'], shell: true },
-    { cmd: 'py', args: ['-m', 'aether.runtime', '--serve'], shell: true },
+    { cmd: 'aether', args: ['--serve'], shell: true, env: process.env },
+    { cmd: 'py', args: ['-3', '-m', 'aether.runtime', '--serve'], shell: true, env: { ...process.env, PYTHONPATH: srcPath } },
+    { cmd: 'python', args: ['-m', 'aether.runtime', '--serve'], shell: true, env: { ...process.env, PYTHONPATH: srcPath } },
+    { cmd: 'python3', args: ['-m', 'aether.runtime', '--serve'], shell: true, env: { ...process.env, PYTHONPATH: srcPath } },
   ];
+
   for (const c of tryCmds) {
     try {
-      runtimeProc = spawn(c.cmd, c.args, {
+      const child = spawn(c.cmd, c.args, {
         cwd: repoRoot,
         detached: true,
         stdio: 'ignore',
         shell: c.shell,
         windowsHide: true,
+        env: c.env,
       });
+      child.on('error', () => {
+        // spawn error (ENOENT etc.) — try next
+        if (runtimeProc === child) runtimeProc = null;
+      });
+      // Assume success until proven otherwise; health loop will confirm
+      runtimeProc = child;
       runtimeProc.unref();
       spawnedByUs = true;
-      console.log('Spawned runtime via', c.cmd);
+      console.log('[aether] Spawned runtime via', c.cmd, c.args.join(' '));
       return true;
     } catch (e) {
+      console.warn('[aether] Spawn failed for', c.cmd, e.message);
       runtimeProc = null;
     }
   }
+  console.error('[aether] All runtime spawn attempts failed');
   return false;
 }
 
 async function ensureRuntime() {
   if (await healthCheck()) return { ok: true, already: true };
-  spawnRuntime();
-  for (let i = 0; i < 20; i++) {
+  const spawned = spawnRuntime();
+  if (!spawned) {
+    return { ok: false, error: 'Could not spawn runtime (aether / py / python not found). Run: pip install -e ".[db]" then aether --serve' };
+  }
+  for (let i = 0; i < 25; i++) {
     await new Promise(r => setTimeout(r, 400));
     if (await healthCheck()) return { ok: true, spawned: true };
   }
-  return { ok: false, error: 'Runtime did not become healthy on :7420' };
+  return { ok: false, error: 'Runtime did not become healthy on :7420 within ~10s. Check console or run aether --serve manually.' };
 }
 
 function createWindow() {
@@ -75,15 +91,15 @@ function createWindow() {
 
   mainWindow = new BrowserWindow({
     width: 400,
-    height: 680,
+    height: 720,
     minWidth: 360,
-    minHeight: 520,
+    minHeight: 560,
     show: false,
     frame: false,
     resizable: true,
     alwaysOnTop: false,
     skipTaskbar: true,
-    backgroundColor: '#0a0a0c',
+    backgroundColor: '#0b0b0e',
     webPreferences: {
       nodeIntegration: false,
       contextIsolation: true,
@@ -94,7 +110,7 @@ function createWindow() {
   mainWindow.loadFile('index.html');
 
   const x = width - 430;
-  const y = Math.max(40, height - 720);
+  const y = Math.max(40, height - 760);
   mainWindow.setPosition(x, y);
 
   mainWindow.once('ready-to-show', () => {
@@ -202,5 +218,4 @@ app.on('will-quit', () => globalShortcut.unregisterAll());
 app.on('before-quit', () => {
   isQuitting = true;
   // Leave runtime running so mobile / other clients can use it later.
-  // Only kill if we want strict single-app lifecycle — currently we keep it.
 });

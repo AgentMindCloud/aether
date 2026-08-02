@@ -1,12 +1,11 @@
-// Aether shell — talk loop + auto runtime + priority levels
+// Aether shell — Build 0.1 felt presence: TTS + mic + premium talk loop
 
 const RUNTIME_URL = 'http://127.0.0.1:7420';
 
 const presenceOrb = document.getElementById('presenceOrb');
 const presenceStatus = document.getElementById('presenceStatus');
-const presenceExpression = document.getElementById('presenceExpression');
+const presenceLine = document.getElementById('presenceLine');
 const captureInput = document.getElementById('captureInput');
-const captureLabel = document.getElementById('captureLabel');
 const captureHint = document.getElementById('captureHint');
 const runtimeLabel = document.getElementById('runtimeLabel');
 const runtimeDot = document.getElementById('runtimeDot');
@@ -15,8 +14,12 @@ const priorityList = document.getElementById('priorityList');
 const bookmarkList = document.getElementById('bookmarkList');
 const firstUseBtn = document.getElementById('firstUseBtn');
 const startSessionBtn = document.getElementById('startSessionBtn');
-const talkLog = document.getElementById('talkLog');
 const talkMessages = document.getElementById('talkMessages');
+const emptySession = document.getElementById('emptySession');
+const sessionBadge = document.getElementById('sessionBadge');
+const talkBox = document.getElementById('talkBox');
+const micBtn = document.getElementById('micBtn');
+const brandSubtitle = document.getElementById('brandSubtitle');
 
 let currentPlanBookmark = null;
 let runtimeOnline = false;
@@ -24,20 +27,24 @@ let currentVoiceSession = null;
 let lastPresenceKey = '';
 let presenceSettleTimer = null;
 let busy = false;
+let speakingUtterance = null;
+let recognition = null;
+let isListeningMic = false;
 
 let localPriority = [
-  { id: 'p1', title: 'Type a message after Start Session', meta: 'Talk · Now', level: 'medium' },
-  { id: 'p2', title: 'Set GROK_VOICE_API_KEY for live voice later', meta: 'Optional', level: 'low' },
+  { id: 'p1', title: 'Start Session and speak or type', meta: 'Talk · Now', level: 'medium' },
+  { id: 'p2', title: 'Optional: GROK_VOICE_API_KEY for live later', meta: 'Later', level: 'low' },
 ];
 
 let localBookmarks = [
   {
-    id: 'b1', category: 'Immediate', title: 'Talk in-session (text path now, voice later)',
-    source: 'Aether', score: 9.2,
-    plan: ['Start Session', 'Type in the box', 'Read agent reply in SESSION']
+    id: 'b1', category: 'Immediate', title: 'Talk path is live (TTS + text, mic when allowed)',
+    source: 'Aether', score: 9.5,
+    plan: ['Start Session', 'Type or use mic', 'Hear agent reply']
   },
 ];
 
+/* ─── Presence ─── */
 function renderPresence(state) {
   if (!state) return;
   const expression = state.expression || 'neutral';
@@ -48,7 +55,6 @@ function renderPresence(state) {
   lastPresenceKey = key;
   presenceOrb.className = 'presence-orb ' + status;
   presenceStatus.textContent = status;
-  presenceExpression.textContent = expression + ' · ' + Math.round(intensity * 100) + '%';
 }
 
 function setPresence(state, settleMs = 0) {
@@ -59,16 +65,118 @@ function setPresence(state, settleMs = 0) {
   if (presenceSettleTimer) clearTimeout(presenceSettleTimer);
   if (settleMs > 0) {
     presenceSettleTimer = setTimeout(() => {
-      // Keep listening if session still active
       if (currentVoiceSession) {
-        setPresence({ expression: 'attentive', status: 'listening', intensity: 0.7 }, 0);
+        setPresence({ expression: 'attentive', status: 'listening', intensity: 0.75 }, 0);
+        presenceLine.textContent = 'Listening…';
       } else {
         setPresence({ expression: 'calm', status: 'idle', intensity: 0.5 }, 0);
+        presenceLine.textContent = 'Ready when you are';
       }
     }, settleMs);
   }
 }
 
+/* ─── TTS (Web Speech API) ─── */
+function speakText(text) {
+  return new Promise((resolve) => {
+    if (!window.speechSynthesis || !text) {
+      resolve(false);
+      return;
+    }
+    try {
+      window.speechSynthesis.cancel();
+      const u = new SpeechSynthesisUtterance(text);
+      u.rate = 1.02;
+      u.pitch = 1.0;
+      u.volume = 1.0;
+      // Prefer a calm English voice if available
+      const voices = window.speechSynthesis.getVoices();
+      const preferred = voices.find(v => /en-US|en-GB|English/i.test(v.lang) && /Google|Natural|Samantha|Daniel|Microsoft/i.test(v.name))
+        || voices.find(v => /en/i.test(v.lang));
+      if (preferred) u.voice = preferred;
+      speakingUtterance = u;
+      u.onend = () => { speakingUtterance = null; resolve(true); };
+      u.onerror = () => { speakingUtterance = null; resolve(false); };
+      window.speechSynthesis.speak(u);
+    } catch (e) {
+      console.warn('TTS failed', e);
+      resolve(false);
+    }
+  });
+}
+
+function stopSpeaking() {
+  if (window.speechSynthesis) window.speechSynthesis.cancel();
+  speakingUtterance = null;
+}
+
+/* ─── STT (Web Speech Recognition) ─── */
+function initRecognition() {
+  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+  if (!SR) return null;
+  const r = new SR();
+  r.continuous = false;
+  r.interimResults = true;
+  r.lang = 'en-US';
+  r.onresult = (event) => {
+    let interim = '';
+    let final = '';
+    for (let i = event.resultIndex; i < event.results.length; i++) {
+      const t = event.results[i][0].transcript;
+      if (event.results[i].isFinal) final += t;
+      else interim += t;
+    }
+    if (interim) {
+      captureInput.value = interim;
+      presenceLine.textContent = interim.slice(0, 48);
+    }
+    if (final) {
+      captureInput.value = final.trim();
+      stopMic();
+      onCaptureOrTalk();
+    }
+  };
+  r.onerror = (e) => {
+    console.warn('STT', e.error);
+    stopMic();
+    if (e.error === 'not-allowed') {
+      sessionLabel.textContent = 'Mic permission denied — type instead';
+    }
+  };
+  r.onend = () => { stopMic(); };
+  return r;
+}
+
+function startMic() {
+  if (!recognition) recognition = initRecognition();
+  if (!recognition) {
+    sessionLabel.textContent = 'Speech recognition not available in this environment';
+    return;
+  }
+  if (!currentVoiceSession) {
+    sessionLabel.textContent = 'Start Session first';
+    return;
+  }
+  try {
+    stopSpeaking();
+    recognition.start();
+    isListeningMic = true;
+    micBtn.classList.add('active');
+    setPresence({ expression: 'attentive', status: 'listening', intensity: 0.9 }, 0);
+    presenceLine.textContent = 'Listening to you…';
+    sessionLabel.textContent = 'Mic active — speak now';
+  } catch (e) {
+    console.warn('mic start', e);
+  }
+}
+
+function stopMic() {
+  isListeningMic = false;
+  micBtn.classList.remove('active');
+  try { if (recognition) recognition.stop(); } catch (_) {}
+}
+
+/* ─── API ─── */
 async function api(path, options = {}) {
   try {
     const res = await fetch(RUNTIME_URL + path, {
@@ -90,7 +198,7 @@ async function checkRuntime() {
   const health = await api('/health');
   runtimeOnline = !!(health && health.status === 'ok');
   runtimeDot.className = 'dot ' + (runtimeOnline ? 'ok' : 'warn');
-  let label = runtimeOnline ? 'Runtime: connected (:7420)' : 'Runtime: offline';
+  let label = runtimeOnline ? 'Runtime: connected' : 'Runtime: offline';
   if (health && health.memory && health.memory.backend) label += ' · ' + health.memory.backend;
   if (health && health.voice_live) label += ' · voice live';
   runtimeLabel.textContent = label;
@@ -105,6 +213,7 @@ function escapeHtml(s) {
     .replace(/"/g, '&quot;');
 }
 
+/* ─── Lists ─── */
 function renderPriority(items) {
   const data = items || localPriority;
   priorityList.innerHTML = data.map(item => {
@@ -177,7 +286,7 @@ async function confirmMakeReal() {
       body: JSON.stringify({ bookmark_id: id })
     });
     if (result && result.status === 'promoted') {
-      setPresence(result.presence || { expression: 'pleased', status: 'speaking', intensity: 0.7 }, 1800);
+      setPresence({ expression: 'pleased', status: 'speaking', intensity: 0.7 }, 1800);
       sessionLabel.textContent = 'Promoted to Priority';
       const pri = await api('/priority');
       if (pri && pri.items) { localPriority = pri.items; renderPriority(pri.items); }
@@ -198,52 +307,85 @@ async function confirmMakeReal() {
 function switchView(view) {
   document.getElementById('priorityView').classList.toggle('active', view === 'priority');
   document.getElementById('bookmarkView').classList.toggle('active', view === 'bookmarks');
+  document.getElementById('tabPriority').classList.toggle('active', view === 'priority');
+  document.getElementById('tabBookmarks').classList.toggle('active', view === 'bookmarks');
 }
 
+/* ─── Session / talk ─── */
 function setTalkMode(on) {
   if (on) {
-    talkLog.classList.remove('hidden');
-    captureLabel.textContent = 'TALK TO AETHER';
-    captureInput.placeholder = 'Say something… (Enter to send)';
-    captureHint.textContent = 'Session active · Enter sends a turn · Start Session again ends it';
+    sessionBadge.textContent = 'live';
+    sessionBadge.classList.add('on');
+    talkBox.classList.add('session-active');
+    captureInput.placeholder = 'Speak or type… Enter sends';
+    captureHint.textContent = 'Session active · Mic or Enter · End Session to stop';
     startSessionBtn.textContent = 'End Session';
+    brandSubtitle.textContent = 'In session';
+    if (emptySession) emptySession.style.display = 'none';
   } else {
-    talkLog.classList.add('hidden');
+    sessionBadge.textContent = 'off';
+    sessionBadge.classList.remove('on');
+    talkBox.classList.remove('session-active');
     talkMessages.innerHTML = '';
-    captureLabel.textContent = 'QUICK CAPTURE';
+    if (emptySession) {
+      talkMessages.appendChild(emptySession);
+      emptySession.style.display = '';
+    }
     captureInput.placeholder = 'Capture a thought or next move…';
-    captureHint.textContent = 'Ctrl + Alt + A · or type and press Enter';
+    captureHint.textContent = 'Ctrl+Alt+A · Enter to send · Mic for voice input';
     startSessionBtn.textContent = 'Start Session';
+    brandSubtitle.textContent = 'Presence';
+    stopMic();
+    stopSpeaking();
   }
 }
 
-function appendTalk(role, text) {
+function appendTalk(role, text, opts = {}) {
+  if (emptySession && emptySession.parentNode) emptySession.remove();
   const div = document.createElement('div');
-  div.className = 'talk-bubble ' + role;
+  div.className = 'talk-bubble ' + role + (opts.speaking ? ' speaking-now' : '');
   div.textContent = text;
   talkMessages.appendChild(div);
   talkMessages.scrollTop = talkMessages.scrollHeight;
+  return div;
 }
 
 async function sendTurn(text) {
   if (!currentVoiceSession || !text) return;
+  stopSpeaking();
   appendTalk('user', text);
   setPresence({ expression: 'thoughtful', status: 'thinking', intensity: 0.65 }, 0);
+  presenceLine.textContent = 'Thinking…';
   sessionLabel.textContent = 'Thinking…';
+
   const result = await api('/voice/turn', {
     method: 'POST',
     body: JSON.stringify({ session_id: currentVoiceSession, transcript: text })
   });
+
   if (!result || result.error) {
-    appendTalk('agent', result && result.error ? result.error : 'No response (is runtime up?)');
+    const err = result && result.error ? result.error : 'No response (is runtime up?)';
+    appendTalk('agent', err);
     setPresence({ expression: 'concerned', status: 'listening', intensity: 0.6 }, 0);
+    presenceLine.textContent = 'Turn failed';
     sessionLabel.textContent = 'Turn failed';
     return;
   }
+
   const reply = result.response || result.message || JSON.stringify(result).slice(0, 200);
-  appendTalk('agent', reply);
-  setPresence(result.presence || { expression: 'attentive', status: 'speaking', intensity: 0.8 }, 2200);
-  sessionLabel.textContent = 'Turn ' + (result.turn || '') + (result.live ? ' · live' : ' · sim');
+  const bubble = appendTalk('agent', reply, { speaking: true });
+  setPresence(result.presence || { expression: 'attentive', status: 'speaking', intensity: 0.85 }, 0);
+  presenceLine.textContent = reply.slice(0, 56);
+  sessionLabel.textContent = 'Turn ' + (result.turn || '') + (result.live ? ' · live' : ' · sim') +
+    (result.memory_used ? ' · mem ' + result.memory_used : '');
+
+  // Speak the reply so the user *hears* the agent
+  const spoke = await speakText(reply);
+  if (bubble) bubble.classList.remove('speaking-now');
+  // After speech ends, settle back to listening
+  const settle = spoke ? 400 : 1800;
+  setPresence({ expression: 'attentive', status: 'listening', intensity: 0.75 }, settle);
+  presenceLine.textContent = 'Listening…';
 }
 
 async function onCaptureOrTalk() {
@@ -254,7 +396,6 @@ async function onCaptureOrTalk() {
     await sendTurn(text);
     return;
   }
-  // Priority capture
   if (runtimeOnline) {
     await api('/priority/add', { method: 'POST', body: JSON.stringify({ title: text, level: 'medium' }) });
     const pri = await api('/priority');
@@ -279,15 +420,19 @@ async function runFirstUse() {
     if (!magic) {
       magic = {
         moves: [
-          { title: 'Start Session and type a message', why: 'Talk loop', effort: 'low' },
+          { title: 'Start Session and speak or type', why: 'Talk loop', effort: 'low' },
           { title: 'Confirm runtime auto-start', why: 'One-window workflow', effort: 'low' }
         ],
         presence: { expression: 'pleased', status: 'speaking', intensity: 0.8 },
-        message: 'Offline first-use'
+        message: 'Ready. Start Session to talk.'
       };
     }
-    setPresence(magic.presence || { expression: 'pleased', status: 'speaking', intensity: 0.8 }, 2400);
-    sessionLabel.textContent = magic.message ? String(magic.message).slice(0, 52) : 'First-use ready';
+    const msg = magic.message || 'Ready. Start Session to talk.';
+    setPresence(magic.presence || { expression: 'pleased', status: 'speaking', intensity: 0.8 }, 0);
+    presenceLine.textContent = String(msg).slice(0, 56);
+    sessionLabel.textContent = String(msg).slice(0, 52);
+    await speakText(String(msg));
+    setPresence({ expression: 'attentive', status: 'idle', intensity: 0.6 }, 600);
     if (magic.moves && magic.moves.length) {
       const moves = magic.moves.map((m, i) => ({
         id: 'fu-' + i,
@@ -309,30 +454,34 @@ async function startOrEndSession() {
   startSessionBtn.disabled = true;
   try {
     if (currentVoiceSession) {
-      // End
+      stopSpeaking();
+      stopMic();
       if (runtimeOnline) {
         await api('/voice/end', { method: 'POST', body: JSON.stringify({ session_id: currentVoiceSession }) });
       }
       currentVoiceSession = null;
       setTalkMode(false);
       sessionLabel.textContent = 'Session ended';
+      presenceLine.textContent = 'Ready when you are';
       setPresence({ expression: 'calm', status: 'idle', intensity: 0.5 }, 0);
       return;
     }
 
-    setPresence({ expression: 'attentive', status: 'listening', intensity: 0.75 }, 0);
+    setPresence({ expression: 'attentive', status: 'listening', intensity: 0.8 }, 0);
+    presenceLine.textContent = 'Starting…';
     sessionLabel.textContent = 'Starting session…';
     await checkRuntime();
     if (!runtimeOnline && window.aetherAPI && window.aetherAPI.ensureRuntime) {
       sessionLabel.textContent = 'Starting runtime…';
       await window.aetherAPI.ensureRuntime();
-      for (let i = 0; i < 15; i++) {
-        await new Promise(r => setTimeout(r, 500));
+      for (let i = 0; i < 18; i++) {
+        await new Promise(r => setTimeout(r, 450));
         if (await checkRuntime()) break;
       }
     }
     if (!runtimeOnline) {
-      sessionLabel.textContent = 'Runtime offline — try again in a few seconds';
+      sessionLabel.textContent = 'Runtime offline — check PATH or run: aether --serve';
+      presenceLine.textContent = 'Runtime offline';
       setPresence({ expression: 'concerned', status: 'idle', intensity: 0.5 }, 0);
       return;
     }
@@ -343,10 +492,14 @@ async function startOrEndSession() {
     if (sess && (sess.status === 'session_started' || sess.session_id)) {
       currentVoiceSession = sess.session_id;
       const mode = sess.live ? 'live' : 'sim';
-      sessionLabel.textContent = (sess.session_id || '').slice(0, 16) + ' · ' + mode + ' · type below';
+      sessionLabel.textContent = (sess.session_id || '').slice(0, 14) + ' · ' + mode;
       setPresence(sess.presence || { expression: 'attentive', status: 'listening', intensity: 0.8 }, 0);
       setTalkMode(true);
-      appendTalk('agent', 'Listening. Type a message and press Enter.');
+      const greeting = sess.greeting || 'Listening. Speak or type when ready.';
+      appendTalk('agent', greeting);
+      presenceLine.textContent = 'Listening…';
+      await speakText(greeting);
+      setPresence({ expression: 'attentive', status: 'listening', intensity: 0.75 }, 300);
       captureInput.focus();
       return;
     }
@@ -380,15 +533,21 @@ async function demoComputerUse() {
     const result = await window.aetherAPI.executeComputerUse({ action: conf.action, details: conf.details });
     sessionLabel.textContent = result && result.ok ? 'Screenshot saved' : 'Execute failed';
     setPresence({ expression: 'pleased', status: 'speaking', intensity: 0.75 }, 2000);
+    await speakText(result && result.ok ? 'Screenshot saved.' : 'Screenshot failed.');
   }
 }
 
+/* ─── Events ─── */
 document.getElementById('captureBtn').addEventListener('click', onCaptureOrTalk);
 captureInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') onCaptureOrTalk(); });
+micBtn.addEventListener('click', () => {
+  if (isListeningMic) stopMic();
+  else startMic();
+});
 document.getElementById('closeBtn').addEventListener('click', () => window.close());
 document.getElementById('minimizeBtn').addEventListener('click', () => window.close());
-document.getElementById('switchToBookmarks').addEventListener('click', () => switchView('bookmarks'));
-document.getElementById('backToPriority').addEventListener('click', () => switchView('priority'));
+document.getElementById('tabPriority').addEventListener('click', () => switchView('priority'));
+document.getElementById('tabBookmarks').addEventListener('click', () => switchView('bookmarks'));
 firstUseBtn.addEventListener('click', runFirstUse);
 startSessionBtn.addEventListener('click', startOrEndSession);
 document.getElementById('closeModal').addEventListener('click', closePlanModal);
@@ -407,16 +566,25 @@ document.addEventListener('keydown', (e) => {
     e.preventDefault();
     captureInput.focus();
   }
-  if (e.key === 'Escape') closePlanModal();
+  if (e.key === 'Escape') {
+    closePlanModal();
+    stopMic();
+    stopSpeaking();
+  }
 });
 
+// Chrome loads voices async
+if (window.speechSynthesis) {
+  window.speechSynthesis.getVoices();
+  window.speechSynthesis.onvoiceschanged = () => window.speechSynthesis.getVoices();
+}
+
 (async () => {
-  // Ask main to ensure runtime (auto-spawn)
   if (window.aetherAPI && window.aetherAPI.ensureRuntime) {
     sessionLabel.textContent = 'Checking runtime…';
     await window.aetherAPI.ensureRuntime();
   }
-  for (let i = 0; i < 12; i++) {
+  for (let i = 0; i < 14; i++) {
     if (await checkRuntime()) break;
     await new Promise(r => setTimeout(r, 400));
   }
@@ -425,6 +593,8 @@ document.addEventListener('keydown', (e) => {
     const bms = await api('/bookmarks');
     if (pri && pri.items) localPriority = pri.items;
     if (bms && bms.items) localBookmarks = bms.items;
+  } else {
+    sessionLabel.textContent = 'Runtime offline — will auto-start on Start Session';
   }
   renderPriority();
   renderBookmarks();

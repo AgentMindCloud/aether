@@ -13,7 +13,7 @@
         <div class="logo">A</div>
         <div class="brand-text">
           <div class="title">Aether</div>
-          <div class="subtitle">Presence</div>
+          <div class="subtitle" id="brandSubtitle">Presence</div>
         </div>
       </div>
       <div class="header-actions">
@@ -22,44 +22,66 @@
       </div>
     </header>
 
-    <section class="presence-section">
-      <div class="presence-orb" id="presenceOrb">
-        <div class="orb-inner" id="orbInner"></div>
+    <!-- Presence hero -->
+    <section class="presence-hero">
+      <div class="orb-wrap">
+        <div class="presence-orb" id="presenceOrb">
+          <div class="orb-ring"></div>
+          <div class="orb-inner" id="orbInner"></div>
+          <div class="orb-core"></div>
+        </div>
       </div>
       <div class="presence-meta">
         <div class="presence-status" id="presenceStatus">idle</div>
-        <div class="presence-expression" id="presenceExpression">neutral</div>
+        <div class="presence-line" id="presenceLine">Ready when you are</div>
       </div>
     </section>
 
-    <section class="capture">
-      <div class="section-label" id="captureLabel">QUICK CAPTURE</div>
-      <div class="capture-box">
-        <input type="text" id="captureInput" placeholder="Capture a thought or next move…" />
-        <button class="capture-btn" id="captureBtn">+</button>
+    <!-- Session transcript (first-class when active) -->
+    <section class="session-panel" id="sessionPanel">
+      <div class="session-header">
+        <span class="section-label">SESSION</span>
+        <span class="session-badge" id="sessionBadge">off</span>
       </div>
-      <div class="capture-hint" id="captureHint">Ctrl + Alt + A · or type and press Enter</div>
+      <div class="talk-messages" id="talkMessages">
+        <div class="empty-session" id="emptySession">Start a session to talk. Agent will reply and speak.</div>
+      </div>
     </section>
 
-    <section class="talk-log hidden" id="talkLog">
-      <div class="section-label">SESSION</div>
-      <div class="talk-messages" id="talkMessages"></div>
+    <!-- Talk / capture input -->
+    <section class="talk-bar">
+      <div class="talk-box" id="talkBox">
+        <button class="mic-btn" id="micBtn" title="Hold to speak (Web Speech)">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/>
+            <path d="M19 10v2a7 7 0 0 1-14 0v-2"/>
+            <line x1="12" y1="19" x2="12" y2="23"/>
+            <line x1="8" y1="23" x2="16" y2="23"/>
+          </svg>
+        </button>
+        <input type="text" id="captureInput" placeholder="Capture a thought or next move…" autocomplete="off" />
+        <button class="send-btn" id="captureBtn" title="Send">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <line x1="22" y1="2" x2="11" y2="13"/>
+            <polygon points="22 2 15 22 11 13 2 9 22 2"/>
+          </svg>
+        </button>
+      </div>
+      <div class="talk-hint" id="captureHint">Ctrl+Alt+A · Enter to send · Mic for voice input</div>
     </section>
 
-    <section class="view active" id="priorityView">
-      <div class="view-header">
-        <div class="section-label">PRIORITY LIST</div>
-        <button class="text-btn" id="switchToBookmarks">Bookmarks →</button>
+    <!-- Secondary: Priority / Bookmarks -->
+    <section class="secondary">
+      <div class="tabs">
+        <button class="tab active" id="tabPriority" data-view="priority">Priority</button>
+        <button class="tab" id="tabBookmarks" data-view="bookmarks">Bookmarks</button>
       </div>
-      <ul class="priority-list" id="priorityList"></ul>
-    </section>
-
-    <section class="view" id="bookmarkView">
-      <div class="view-header">
-        <div class="section-label">BOOKMARK INTELLIGENCE</div>
-        <button class="text-btn" id="backToPriority">← Priority</button>
+      <div class="view active" id="priorityView">
+        <ul class="priority-list" id="priorityList"></ul>
       </div>
-      <ul class="bookmark-list" id="bookmarkList"></ul>
+      <div class="view" id="bookmarkView">
+        <ul class="bookmark-list" id="bookmarkList"></ul>
+      </div>
     </section>
 
     <section class="status-bar">
@@ -73,7 +95,7 @@
     </section>
 
     <footer class="panel-footer">
-      <button class="footer-btn" id="firstUseBtn">First-use Magic</button>
+      <button class="footer-btn" id="firstUseBtn">First-use</button>
       <button class="footer-btn primary" id="startSessionBtn">Start Session</button>
     </footer>
   </div>

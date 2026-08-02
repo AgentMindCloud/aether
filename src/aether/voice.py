@@ -1,18 +1,22 @@
-"""Aether Voice — Grok Voice Think Fast 2.0 + Realtime-oriented path (P3).
+"""Aether Voice — Grok Voice Think Fast 2.0 + Realtime-oriented path.
 
 Offline-first simulation with structure ready for live WebSocket / Realtime API
 when GROK_VOICE_API_KEY is present. Supports partial transcripts and presence
 state machine aligned with .grok/voice.yaml latency budgets.
+
+Build 0.1: replies are short, calm, concrete, and propose one next action.
+Memory facts are used silently when relevant. TTS-ready text only.
 """
 
 from __future__ import annotations
 
 import os
+import re
 import time
 import uuid
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
-from typing import Any, Callable
+from typing import Any
 
 
 def _now() -> str:
@@ -55,7 +59,7 @@ class VoiceClient:
     def start_session(self, user_id: str, mode: str = "reactive") -> dict[str, Any]:
         sid = f"vs-{uuid.uuid4().hex[:10]}"
         sess = VoiceSession(session_id=sid, user_id=user_id, mode=mode)
-        sess.presence = {"expression": "attentive", "status": "listening", "intensity": 0.7}
+        sess.presence = {"expression": "attentive", "status": "listening", "intensity": 0.75}
         sess.status = "streaming" if self.live else "active"
         self.sessions[sid] = sess
 
@@ -69,6 +73,7 @@ class VoiceClient:
             "realtime_ready": self.realtime_ready,
             "presence": sess.presence,
             "started_at": sess.started_at,
+            "greeting": "Listening. Speak or type when ready.",
             "note": (
                 "Live path — connect Realtime / WS endpoint with key"
                 if self.live
@@ -82,7 +87,7 @@ class VoiceClient:
         if not sess or sess.status == "ended":
             return {"error": "No active session"}
         sess.partial_transcript = text
-        sess.presence = {"expression": "attentive", "status": "listening", "intensity": 0.75}
+        sess.presence = {"expression": "attentive", "status": "listening", "intensity": 0.8}
         sess.last_activity = _now()
         return {
             "session_id": session_id,
@@ -109,7 +114,7 @@ class VoiceClient:
 
         t0 = time.perf_counter()
         response = self._compose_response(transcript, memory_facts, x_context)
-        sess.presence = {"expression": "attentive", "status": "speaking", "intensity": 0.8}
+        sess.presence = {"expression": "attentive", "status": "speaking", "intensity": 0.85}
         elapsed_ms = int((time.perf_counter() - t0) * 1000)
 
         result = {
@@ -125,6 +130,7 @@ class VoiceClient:
             "x_context_items": len(x_context or []),
             "memory_used": len(memory_facts or []),
             "timestamp": _now(),
+            "tts_ready": True,
         }
         if self.live:
             result["note"] = "Stream-ready — wire to Grok Voice Realtime / Think Fast 2.0 endpoint"
@@ -152,24 +158,90 @@ class VoiceClient:
             return {"expression": "neutral", "status": "idle", "intensity": 0.5}
         return sess.presence
 
+    def _extract_fact_snippets(self, memory_facts: list[dict] | None, limit: int = 2) -> list[str]:
+        if not memory_facts:
+            return []
+        snippets: list[str] = []
+        for f in memory_facts[:6]:
+            content = (
+                f.get("content")
+                or f.get("text")
+                or f.get("fact")
+                or f.get("value")
+                or ""
+            )
+            content = str(content).strip()
+            if not content:
+                continue
+            lower = content.lower()
+            if any(k in lower for k in ("prefer", "short", "calm", "concrete", "next action", "style")):
+                snippets.insert(0, content[:120])
+            else:
+                snippets.append(content[:120])
+            if len(snippets) >= limit:
+                break
+        return snippets[:limit]
+
     def _compose_response(
         self,
         transcript: str,
         memory_facts: list[dict] | None,
         x_context: list[dict] | None,
     ) -> str:
-        t = transcript.lower()
-        if memory_facts:
-            return "Got it. I kept the earlier context and stayed under the voice limit."
+        """Short, calm, concrete replies. Max ~35 words. One next action when useful."""
+        t = (transcript or "").strip()
+        tl = t.lower()
+        facts = self._extract_fact_snippets(memory_facts)
+
+        def reply(text: str) -> str:
+            words = text.split()
+            if len(words) > 38:
+                text = " ".join(words[:36]).rstrip(",.;:") + "."
+            return text
+
+        if re.search(r"\b(hi|hello|hey|good morning|good evening)\b", tl) or tl in ("yo", "sup"):
+            if facts:
+                return reply("Here. I have prior context. What do you want to move first?")
+            return reply("Here. Ready when you are. What is the highest-leverage next move?")
+
+        if any(w in tl for w in ("remember", "preference", "my style", "how i like")):
+            if facts:
+                snippet = facts[0]
+                return reply(f"Noted earlier: {snippet[:80]}. I will keep replies short and concrete.")
+            return reply("I can store a preference. Tell me the style you want — short, calm, one next action.")
+
+        if any(w in tl for w in ("plan", "next", "priority", "what should", "do next", "focus")):
+            return reply("Put the single highest-leverage item in Priority, then execute it in the next 25 minutes.")
+
+        if any(w in tl for w in ("screenshot", "screen", "click", "type", "window", "mouse")):
+            return reply("I can request that computer action. I will ask for spoken confirmation before executing.")
+
+        if any(w in tl for w in ("thread", "post", "idea", "hook", "tweet", "content")):
+            return reply("I can draft three hooks. Say the topic and the audience in one sentence.")
+
+        if any(w in tl for w in ("github", "issue", "pr", "pull request", "repo")):
+            return reply("I can list issues or open PRs on AgentMindCloud/aether. Which one do you need?")
+
+        if any(w in tl for w in ("status", "how are you", "working", "online", "ready")):
+            mode = "live voice" if self.live else "sim voice with TTS"
+            return reply(f"Online. Session active, {mode}. Tell me the next concrete step.")
+
+        if any(w in tl for w in ("help", "what can you", "capabilities")):
+            return reply("Talk, capture priorities, request screenshots with confirmation, ideate content, and use governed memory.")
+
+        if any(w in tl for w in ("make it real", "promote", "bookmark")):
+            return reply("Open Bookmarks, pick the item, then press Make it real. It lands in Priority.")
+
+        if facts:
+            return reply(f"I have that context. {facts[0][:70]}. What is the one action you want right now?")
+
         if x_context:
-            return "I see the live context. Ready to act on the strongest signal when you are."
-        if any(w in t for w in ("plan", "next", "priority", "do")):
-            return "I can turn that into a concrete next move. Want me to put it in Priority?"
-        if any(w in t for w in ("screenshot", "click", "type", "window")):
-            return "I can request that computer action. I will ask for spoken confirmation first."
-        if any(w in t for w in ("thread", "post", "idea", "hook")):
-            return "I can ideate angles for that. Want three hooks now?"
-        return "Understood. I am listening."
+            return reply("Live context is available. Point me at the strongest signal and I will act on it.")
+
+        if len(t) < 12:
+            return reply("Got it. Give me a bit more detail or name the next action.")
+
+        return reply("Understood. I am with you. Name the single next action and I will help execute it.")
 
 
 voice_client = VoiceClient()

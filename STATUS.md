@@ -1,43 +1,74 @@
-# Aether Status — 2026-08-02 (P5 + learning path)
+# Aether Status — Build 0.1 (Felt Presence)
 
-## Long-horizon decisions (locked)
+**Date:** 2026-08-02  
+**Branch / focus:** `build/0.1-felt-presence` → vertical slice that *feels* like the product.
 
-| Need | Solution |
-|------|----------|
-| Remember across sessions | **Postgres** primary + file fallback |
-| Learn / get better | **Feedback → confidence** + **distill session → user** |
-| Local models | **Ollama** |
-| Automation | Proactive + optional n8n tool |
-| Core memory | Owned Postgres — not Supabase |
+## What works now (acceptance targets)
 
-## Default Postgres (your machine)
+| Test | Status |
+|------|--------|
+| `cd shell && npm start` auto-ensures runtime on :7420 | Hardened (aether / py / python fallbacks + PYTHONPATH) |
+| Start Session → type or speak → agent replies | Yes |
+| Agent reply is **audible** via Web Speech TTS | Yes (no key required) |
+| Mic → Web Speech STT → turn (when permission granted) | Yes |
+| Orb: listening → thinking → speaking → listening (no flicker loops) | Yes |
+| Premium dark presence UI (hierarchy, glass, motion, transcript first-class) | Yes |
+| Memory-aware short/calm replies with one next action | Yes (sim path; uses memory query results) |
+| Kill switch `AETHER_DISABLED=1` | Intact |
+| Governed memory + Postgres / file fallback | Intact |
 
-```
-Host: localhost
-Port: 5432
-User: postgres
-Password: postgres
-Database: postgres
-DSN: postgresql://postgres:postgres@127.0.0.1:5432/postgres
-```
+## Voice path (honest)
 
-## Learning path (tasks 1–3) — run with `aether --demo`
+| Layer | State |
+|-------|--------|
+| Agent text replies | High-quality sim (short, calm, concrete, next-action) |
+| TTS playback | **Web Speech API** in renderer — user hears the agent |
+| Mic / STT | **Web Speech Recognition** (Chrome/Electron) |
+| Grok Voice Think Fast 2.0 / Realtime | Structure ready; requires `GROK_VOICE_API_KEY` + streaming client (not blocking this slice) |
 
-1. **Consent** — grant cross-session (`set_cross_session_consent(True)`)
-2. **Write** — user preference + session fact into governed store
-3. **Feedback** — mark preference useful (confidence + feedback_score update)
+Upgrade path: set `GROK_VOICE_API_KEY`, then wire Realtime WS in `voice.py` + stream audio to shell. Same `/voice/*` endpoints.
 
-Plus: query, distill, final stats.
+## Run (one block)
 
-## Run
-
-```bash
+```powershell
+# From repo root (once)
+docker compose up -d
 pip install -e ".[db,crypto]"
-aether --demo
-# Expect: backend = "postgres"
-aether --serve
+
+# Daily
+cd shell
+npm start
+# Shell auto-spawns runtime. If offline, status bar shows recovery hint.
 ```
+
+Manual runtime if needed:
+
+```powershell
+aether --serve
+# or: py -m aether.runtime --serve
+```
+
+## Architecture (unchanged)
+
+```
+Electron shell (tray + panel + hotkeys + TTS/STT)
+    ↔ HTTP JSON :7420
+Python runtime (intelligence, memory, safety)
+    ↔ Postgres (facts, consent) / file fallback
+    ↔ Ollama (optional)
+    ↔ Grok Voice API (live when keyed)
+```
+
+**Mobile later:** same HTTP API. Bind with `AETHER_HOST=0.0.0.0`.
+
+## Explicit non-goals this slice
+
+- Full mobile app
+- Full X firehose
+- Multi-agent swarm rewrite
+- Marketplace / grok-install packaging
+- Tauri migration
 
 ## Version
 
-**0.5.0**
+**0.6.0** — Build 0.1 felt presence
