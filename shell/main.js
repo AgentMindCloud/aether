@@ -1,11 +1,11 @@
-const { app, BrowserWindow, Tray, Menu, globalShortcut, nativeImage, screen, ipcMain } = require('electron');
+const { app, BrowserWindow, Tray, Menu, globalShortcut, nativeImage, screen, ipcMain, desktopCapturer } = require('electron');
 const path = require('path');
+const fs = require('fs');
 
 let mainWindow = null;
 let tray = null;
 let isQuitting = false;
 
-// Simple presence state shared with renderer
 let presenceState = {
   expression: 'neutral',
   status: 'idle',
@@ -16,13 +16,12 @@ function createWindow() {
   const { width, height } = screen.getPrimaryDisplay().workAreaSize;
 
   mainWindow = new BrowserWindow({
-    width: 380,
-    height: 520,
-    minWidth: 340,
-    minHeight: 420,
+    width: 400,
+    height: 640,
+    minWidth: 360,
+    minHeight: 480,
     show: false,
     frame: false,
-    transparent: false,
     resizable: true,
     alwaysOnTop: false,
     skipTaskbar: true,
@@ -36,14 +35,12 @@ function createWindow() {
 
   mainWindow.loadFile('index.html');
 
-  // Position near bottom-right
-  const x = width - 410;
-  const y = Math.max(40, height - 560);
+  const x = width - 430;
+  const y = Math.max(40, height - 680);
   mainWindow.setPosition(x, y);
 
   mainWindow.once('ready-to-show', () => {
     mainWindow.show();
-    // Push initial presence
     mainWindow.webContents.send('presence-update', presenceState);
   });
 
@@ -54,53 +51,30 @@ function createWindow() {
     }
   });
 
-  mainWindow.on('closed', () => {
-    mainWindow = null;
-  });
+  mainWindow.on('closed', () => { mainWindow = null; });
 }
 
 function createTray() {
-  // Minimal placeholder icon (16x16)
   const icon = nativeImage.createFromDataURL(
     'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAAXklEQVQ4T2NkYGD4z0ABYBzVMKoBBgYGBv+/f/8zMDAw/P//n4GBgYHBwcGBgYGB4f///wwMDAwMDg4ODAwMDA4ODgz////P8P//fwYGBgYGh4cHBgYGhv///zMwMDAwcHBwAACmWBf1W0s5ZwAAAABJRU5ErkJggg=='
   );
-
   tray = new Tray(icon);
   tray.setToolTip('Aether');
-
   const contextMenu = Menu.buildFromTemplate([
-    {
-      label: 'Show / Hide',
-      click: () => toggleWindow()
-    },
-    {
-      label: 'Focus Capture (Ctrl+Alt+A)',
-      click: () => showAndFocus()
-    },
+    { label: 'Show / Hide', click: () => toggleWindow() },
+    { label: 'Focus Capture (Ctrl+Alt+A)', click: () => showAndFocus() },
     { type: 'separator' },
-    {
-      label: 'Quit',
-      click: () => {
-        isQuitting = true;
-        app.quit();
-      }
-    }
+    { label: 'Quit', click: () => { isQuitting = true; app.quit(); } }
   ]);
-
   tray.setContextMenu(contextMenu);
-
   tray.on('click', () => toggleWindow());
   tray.on('double-click', () => showAndFocus());
 }
 
 function toggleWindow() {
   if (!mainWindow) return;
-  if (mainWindow.isVisible()) {
-    mainWindow.hide();
-  } else {
-    mainWindow.show();
-    mainWindow.focus();
-  }
+  if (mainWindow.isVisible()) mainWindow.hide();
+  else { mainWindow.show(); mainWindow.focus(); }
 }
 
 function showAndFocus() {
@@ -111,42 +85,58 @@ function showAndFocus() {
 }
 
 function registerShortcuts() {
-  const ret = globalShortcut.register('CommandOrControl+Alt+A', () => {
-    showAndFocus();
-  });
-  if (!ret) {
-    console.log('Global shortcut registration failed');
-  }
+  globalShortcut.register('CommandOrControl+Alt+A', () => showAndFocus());
 }
 
-// IPC: presence updates from renderer or future runtime bridge
-ipcMain.on('set-presence', (_event, state) => {
+// Presence
+ipcMain.on('set-presence', (_e, state) => {
   presenceState = { ...presenceState, ...state };
-  if (mainWindow) {
-    mainWindow.webContents.send('presence-update', presenceState);
+  if (mainWindow) mainWindow.webContents.send('presence-update', presenceState);
+});
+ipcMain.handle('get-presence', () => presenceState);
+
+// P2: Real computer-use surfaces (gated by runtime confirmation)
+ipcMain.handle('computer-use-execute', async (_e, payload) => {
+  const { action, details } = payload || {};
+  try {
+    if (action === 'screenshot') {
+      const sources = await desktopCapturer.getSources({
+        types: ['screen'],
+        thumbnailSize: { width: 1280, height: 720 }
+      });
+      if (!sources.length) return { ok: false, error: 'No screen sources' };
+      const primary = sources[0];
+      const png = primary.thumbnail.toPNG();
+      const outDir = path.join(app.getPath('userData'), 'screenshots');
+      fs.mkdirSync(outDir, { recursive: true });
+      const file = path.join(outDir, `shot-${Date.now()}.png`);
+      fs.writeFileSync(file, png);
+      return { ok: true, action: 'screenshot', path: file, size: png.length };
+    }
+    if (action === 'list_windows') {
+      // Limited without extra native modules — return display info
+      const displays = screen.getAllDisplays().map(d => ({
+        id: d.id,
+        bounds: d.bounds,
+        scaleFactor: d.scaleFactor
+      }));
+      return { ok: true, action: 'list_windows', displays };
+    }
+    return { ok: false, error: `Action not implemented in shell yet: ${action}` };
+  } catch (err) {
+    return { ok: false, error: String(err) };
   }
 });
-
-ipcMain.handle('get-presence', () => presenceState);
 
 app.whenReady().then(() => {
   createWindow();
   createTray();
   registerShortcuts();
-
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow();
   });
 });
 
-app.on('window-all-closed', () => {
-  // stay in tray on non-mac
-});
-
-app.on('will-quit', () => {
-  globalShortcut.unregisterAll();
-});
-
-app.on('before-quit', () => {
-  isQuitting = true;
-});
+app.on('window-all-closed', () => {});
+app.on('will-quit', () => globalShortcut.unregisterAll());
+app.on('before-quit', () => { isQuitting = true; });

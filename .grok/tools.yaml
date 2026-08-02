@@ -39,7 +39,7 @@ tools:
         maximum: 1
 
   computer_use_request:
-    description: Request a computer-use action (screenshot, window focus, type, click). Always requires spoken confirmation before execution.
+    description: Request a computer-use action. Always requires spoken confirmation before execution.
     parameters:
       action:
         type: string
@@ -51,6 +51,28 @@ tools:
 
   computer_use_confirm:
     description: Confirm and execute a previously requested computer-use action after spoken user approval.
+
+  content_ideate:
+    description: Generate thread angles and hooks for a topic.
+    parameters:
+      topic:
+        type: string
+      voice:
+        type: string
+
+  content_replies:
+    description: Draft short high-signal reply options for a post.
+    parameters:
+      post:
+        type: string
+      voice:
+        type: string
+
+  audience_insight:
+    description: Quick niche / audience signal snapshot.
+    parameters:
+      niche:
+        type: string
 
   voice_stt:
     engine: grok-stt-2
