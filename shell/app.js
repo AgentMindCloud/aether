@@ -1,4 +1,4 @@
-// Aether shell — P2: voice path, computer-use execute, Priority, Make it real, IPC
+// Aether shell — presence loop fixed, First-use + Start Session hardened
 
 const RUNTIME_URL = 'http://127.0.0.1:7420';
 
@@ -11,41 +11,60 @@ const runtimeDot = document.getElementById('runtimeDot');
 const sessionLabel = document.getElementById('sessionLabel');
 const priorityList = document.getElementById('priorityList');
 const bookmarkList = document.getElementById('bookmarkList');
+const firstUseBtn = document.getElementById('firstUseBtn');
+const startSessionBtn = document.getElementById('startSessionBtn');
 
 let currentPlanBookmark = null;
 let runtimeOnline = false;
 let currentVoiceSession = null;
+let lastPresenceKey = '';
+let presenceSettleTimer = null;
+let busy = false;
 
 let localPriority = [
-  { id: 'p1', title: 'Connect live Grok Voice Think Fast 2.0 key and run first real session', meta: 'High impact · Now', level: 'high' },
-  { id: 'p2', title: 'Exercise computer-use confirmation once with real screenshot', meta: 'Safety · Today', level: 'high' },
+  { id: 'p1', title: 'Connect live Grok Voice key and run first real session', meta: 'High impact · Now', level: 'high' },
+  { id: 'p2', title: 'Exercise computer-use confirmation once', meta: 'Safety · Today', level: 'high' },
 ];
 
 let localBookmarks = [
   {
-    id: 'b1', category: 'Immediate', title: 'Grok Voice Think Fast 2.0 — go live with Realtime path',
+    id: 'b1', category: 'Immediate', title: 'Grok Voice Think Fast 2.0 — go live',
     source: 'x.ai', score: 9.5,
-    plan: ['Set GROK_VOICE_API_KEY', 'Start session via /voice/start', 'Drive presence states', 'Confirm text fallback']
+    plan: ['Set GROK_VOICE_API_KEY', 'Start session', 'Drive presence states']
   },
   {
     id: 'b2', category: 'Act soon', title: 'Computer-use real surfaces behind spoken gates',
     source: 'Aether', score: 8.9,
-    plan: ['Shell exposes screenshot', 'Runtime requests → spoken confirm → shell executes', 'Audit every step']
+    plan: ['Double-click orb for screenshot demo', 'Runtime confirm → shell execute']
   },
-  {
-    id: 'b3', category: 'Possibility', title: 'Content ideation + smart engagement tools',
-    source: 'Aether', score: 8.3,
-    plan: ['Use /content/ideate', 'Use /content/replies', 'Surface audience insight on first-use']
-  }
 ];
 
-function applyPresence(state) {
+/** DOM-only presence update. Never push to main from here. */
+function renderPresence(state) {
   if (!state) return;
-  const { expression = 'neutral', status = 'idle', intensity = 0.5 } = state;
+  const expression = state.expression || 'neutral';
+  const status = state.status || 'idle';
+  const intensity = typeof state.intensity === 'number' ? state.intensity : 0.5;
+  const key = expression + '|' + status + '|' + Math.round(intensity * 100);
+  if (key === lastPresenceKey) return;
+  lastPresenceKey = key;
   presenceOrb.className = 'presence-orb ' + status;
   presenceStatus.textContent = status;
   presenceExpression.textContent = expression + ' · ' + Math.round(intensity * 100) + '%';
-  if (window.aetherAPI) window.aetherAPI.setPresence(state);
+}
+
+/** Intentional presence change from UI actions — update DOM + notify main once. */
+function setPresence(state, settleMs = 0) {
+  renderPresence(state);
+  if (window.aetherAPI) {
+    try { window.aetherAPI.setPresence(state); } catch (_) {}
+  }
+  if (presenceSettleTimer) clearTimeout(presenceSettleTimer);
+  if (settleMs > 0) {
+    presenceSettleTimer = setTimeout(() => {
+      setPresence({ expression: 'calm', status: 'idle', intensity: 0.5 }, 0);
+    }, settleMs);
+  }
 }
 
 async function api(path, options = {}) {
@@ -54,9 +73,13 @@ async function api(path, options = {}) {
       headers: { 'Content-Type': 'application/json' },
       ...options
     });
-    if (!res.ok) throw new Error('HTTP ' + res.status);
+    if (!res.ok) {
+      const text = await res.text().catch(() => '');
+      throw new Error('HTTP ' + res.status + (text ? ': ' + text.slice(0, 120) : ''));
+    }
     return await res.json();
   } catch (e) {
+    console.warn('API', path, e);
     return null;
   }
 }
@@ -67,6 +90,7 @@ async function checkRuntime() {
   runtimeDot.className = 'dot ' + (runtimeOnline ? 'ok' : 'warn');
   let label = runtimeOnline ? 'Runtime: connected (:7420)' : 'Runtime: offline (local data)';
   if (health && health.voice_live) label += ' · voice live';
+  if (health && health.memory && health.memory.backend) label += ' · ' + health.memory.backend;
   runtimeLabel.textContent = label;
   return runtimeOnline;
 }
@@ -77,8 +101,8 @@ function renderPriority(items) {
     <li class="priority-item" data-id="${item.id}">
       <div class="priority-icon ${item.level}">${item.level === 'high' ? '!' : '•'}</div>
       <div class="priority-content">
-        <div class="priority-title">${item.title}</div>
-        <div class="priority-meta">${item.meta || ''}</div>
+        <div class="priority-title">${escapeHtml(item.title)}</div>
+        <div class="priority-meta">${escapeHtml(item.meta || '')}</div>
       </div>
       <div class="priority-tag ${item.level}">${item.level}</div>
     </li>
@@ -92,16 +116,16 @@ function renderBookmarks(items) {
     const planHtml = item.plan && item.plan.length ? `
       <div class="action-plan">
         <div class="plan-label">Ready Action Plan</div>
-        <ul class="plan-steps">${item.plan.map(s => `<li>${s}</li>`).join('')}</ul>
+        <ul class="plan-steps">${item.plan.map(s => `<li>${escapeHtml(s)}</li>`).join('')}</ul>
         <button class="make-real-btn" data-id="${item.id}">Make it real →</button>
       </div>` : '';
     return `
       <li class="bookmark-item" data-id="${item.id}">
         <div class="bookmark-top">
-          <div class="score-badge ${cat}">${item.category}</div>
+          <div class="score-badge ${cat}">${escapeHtml(item.category || '')}</div>
           <div class="bookmark-content">
-            <div class="bookmark-title">${item.title}</div>
-            <div class="bookmark-source">${item.source || ''}</div>
+            <div class="bookmark-title">${escapeHtml(item.title)}</div>
+            <div class="bookmark-source">${escapeHtml(item.source || '')}</div>
           </div>
           <div class="score-number">${item.score || ''}</div>
         </div>
@@ -117,6 +141,14 @@ function renderBookmarks(items) {
   });
 }
 
+function escapeHtml(s) {
+  return String(s || '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+}
+
 function openPlanModal(id) {
   const item = localBookmarks.find(b => b.id === id);
   if (!item || !item.plan) return;
@@ -124,7 +156,7 @@ function openPlanModal(id) {
   document.getElementById('planTitle').textContent = item.title;
   document.getElementById('planBody').innerHTML = `
     <p>This high-signal item already has a ready action plan:</p>
-    <ol>${item.plan.map(s => `<li>${s}</li>`).join('')}</ol>
+    <ol>${item.plan.map(s => `<li>${escapeHtml(s)}</li>`).join('')}</ol>
     <p style="margin-top:10px;font-size:12px;color:var(--text-muted)">
       “Make it real” pushes it into Priority as high impact.
     </p>`;
@@ -145,7 +177,7 @@ async function confirmMakeReal() {
       body: JSON.stringify({ bookmark_id: id })
     });
     if (result && result.status === 'promoted') {
-      applyPresence(result.presence || { expression: 'pleased', status: 'speaking', intensity: 0.7 });
+      setPresence(result.presence || { expression: 'pleased', status: 'speaking', intensity: 0.7 }, 2200);
       sessionLabel.textContent = 'Promoted to Priority';
       const pri = await api('/priority');
       if (pri && pri.items) { localPriority = pri.items; renderPriority(pri.items); }
@@ -158,7 +190,7 @@ async function confirmMakeReal() {
       level: 'high'
     });
     renderPriority();
-    applyPresence({ expression: 'pleased', status: 'speaking', intensity: 0.7 });
+    setPresence({ expression: 'pleased', status: 'speaking', intensity: 0.7 }, 2200);
     sessionLabel.textContent = 'Promoted (local)';
   }
   closePlanModal();
@@ -183,59 +215,84 @@ async function addCapture() {
     renderPriority();
   }
   sessionLabel.textContent = 'Captured';
-  applyPresence({ expression: 'attentive', status: 'thinking', intensity: 0.6 });
-  setTimeout(() => applyPresence({ expression: 'calm', status: 'idle', intensity: 0.5 }), 1600);
+  setPresence({ expression: 'attentive', status: 'thinking', intensity: 0.6 }, 1600);
 }
 
 async function runFirstUse() {
-  applyPresence({ expression: 'thoughtful', status: 'thinking', intensity: 0.7 });
-  sessionLabel.textContent = 'First-use…';
-  let magic = runtimeOnline ? await api('/first-use') : null;
-  if (!magic) {
-    magic = {
-      moves: [
-        { title: 'Start a live voice session', why: 'Presence becomes real with voice' },
-        { title: 'Run one computer-use confirmation', why: 'Prove spoken safety gate' },
-        { title: 'Ideate a thread and promote best angle', why: 'Close signal → Priority loop' }
-      ],
-      presence: { expression: 'pleased', status: 'speaking', intensity: 0.8 }
-    };
-  }
-  applyPresence(magic.presence || { expression: 'pleased', status: 'speaking', intensity: 0.8 });
-  sessionLabel.textContent = 'First-use ready';
-  if (magic.moves) {
-    const moves = magic.moves.map((m, i) => ({
-      id: 'fu-' + i, title: m.title, meta: m.why || 'Suggestion', level: 'high'
-    }));
-    renderPriority([...moves, ...localPriority].slice(0, 6));
+  if (busy) return;
+  busy = true;
+  firstUseBtn.disabled = true;
+  try {
+    setPresence({ expression: 'thoughtful', status: 'thinking', intensity: 0.7 }, 0);
+    sessionLabel.textContent = 'First-use…';
+    await checkRuntime();
+    let magic = runtimeOnline ? await api('/first-use') : null;
+    if (!magic) {
+      magic = {
+        moves: [
+          { title: 'Start a voice session', why: 'Presence becomes real with voice' },
+          { title: 'Confirm Postgres + Ollama in health', why: 'Local stack check' },
+          { title: 'Capture one next move', why: 'Close signal → Priority' }
+        ],
+        presence: { expression: 'pleased', status: 'speaking', intensity: 0.8 },
+        message: 'Offline first-use (start aether --serve for live)'
+      };
+    }
+    setPresence(magic.presence || { expression: 'pleased', status: 'speaking', intensity: 0.8 }, 2800);
+    sessionLabel.textContent = magic.message ? String(magic.message).slice(0, 48) : 'First-use ready';
+    if (magic.moves && magic.moves.length) {
+      const moves = magic.moves.map((m, i) => ({
+        id: 'fu-' + i,
+        title: m.title,
+        meta: m.why || 'Suggestion',
+        level: 'high'
+      }));
+      renderPriority([...moves, ...localPriority].slice(0, 6));
+    }
+  } finally {
+    busy = false;
+    firstUseBtn.disabled = false;
   }
 }
 
 async function startSession() {
-  applyPresence({ expression: 'attentive', status: 'listening', intensity: 0.75 });
-  sessionLabel.textContent = 'Starting voice session…';
-  if (runtimeOnline) {
+  if (busy) return;
+  busy = true;
+  startSessionBtn.disabled = true;
+  try {
+    setPresence({ expression: 'attentive', status: 'listening', intensity: 0.75 }, 0);
+    sessionLabel.textContent = 'Starting voice session…';
+    await checkRuntime();
+    if (!runtimeOnline) {
+      sessionLabel.textContent = 'Runtime offline — run aether --serve';
+      setPresence({ expression: 'concerned', status: 'idle', intensity: 0.5 }, 0);
+      return;
+    }
     const sess = await api('/voice/start', {
       method: 'POST',
       body: JSON.stringify({ user_id: 'local', mode: 'reactive' })
     });
     if (sess && (sess.status === 'session_started' || sess.session_id)) {
       currentVoiceSession = sess.session_id;
-      sessionLabel.textContent = sess.live ? 'Voice live' : 'Voice sim · ' + (sess.mode || 'reactive');
-      applyPresence(sess.presence || { expression: 'attentive', status: 'listening', intensity: 0.8 });
+      const mode = sess.live ? 'live' : 'sim';
+      sessionLabel.textContent = 'Session ' + (sess.session_id || '').slice(0, 14) + ' · ' + mode;
+      setPresence(sess.presence || { expression: 'attentive', status: 'listening', intensity: 0.8 }, 0);
       return;
     }
+    sessionLabel.textContent = 'Session start failed — check runtime log';
+    setPresence({ expression: 'concerned', status: 'idle', intensity: 0.5 }, 0);
+  } finally {
+    busy = false;
+    startSessionBtn.disabled = false;
   }
-  sessionLabel.textContent = 'Session: local stub';
 }
 
-/** P2: request screenshot via runtime confirmation then execute on shell */
 async function demoComputerUse() {
   if (!runtimeOnline) {
     sessionLabel.textContent = 'Runtime offline — start aether --serve';
     return;
   }
-  applyPresence({ expression: 'thoughtful', status: 'thinking', intensity: 0.6 });
+  setPresence({ expression: 'thoughtful', status: 'thinking', intensity: 0.6 }, 0);
   sessionLabel.textContent = 'Requesting screenshot…';
   const req = await api('/computer-use/request', {
     method: 'POST',
@@ -245,8 +302,7 @@ async function demoComputerUse() {
     sessionLabel.textContent = 'Request failed';
     return;
   }
-  sessionLabel.textContent = 'Awaiting confirmation…';
-  // Auto-confirm for demo (in real voice flow this would be spoken)
+  sessionLabel.textContent = 'Confirming…';
   const conf = await api('/computer-use/confirm', {
     method: 'POST',
     body: JSON.stringify({ request_id: req.request_id, spoken_yes: true })
@@ -258,7 +314,7 @@ async function demoComputerUse() {
     });
     if (result && result.ok) {
       sessionLabel.textContent = 'Screenshot saved';
-      applyPresence({ expression: 'pleased', status: 'speaking', intensity: 0.75 });
+      setPresence({ expression: 'pleased', status: 'speaking', intensity: 0.75 }, 2200);
     } else {
       sessionLabel.textContent = 'Execute failed: ' + (result && result.error ? result.error : 'unknown');
     }
@@ -274,19 +330,19 @@ document.getElementById('closeBtn').addEventListener('click', () => window.close
 document.getElementById('minimizeBtn').addEventListener('click', () => window.close());
 document.getElementById('switchToBookmarks').addEventListener('click', () => switchView('bookmarks'));
 document.getElementById('backToPriority').addEventListener('click', () => switchView('priority'));
-document.getElementById('firstUseBtn').addEventListener('click', runFirstUse);
-document.getElementById('startSessionBtn').addEventListener('click', startSession);
+firstUseBtn.addEventListener('click', runFirstUse);
+startSessionBtn.addEventListener('click', startSession);
 document.getElementById('closeModal').addEventListener('click', closePlanModal);
 document.getElementById('cancelPlan').addEventListener('click', closePlanModal);
 document.getElementById('confirmMakeReal').addEventListener('click', confirmMakeReal);
 
-// Double-click presence orb = computer-use demo
 presenceOrb.addEventListener('dblclick', demoComputerUse);
 
 if (window.aetherAPI) {
-  window.aetherAPI.onPresenceUpdate((_e, state) => applyPresence(state));
+  // Main → renderer only: never push back (breaks feedback loop)
+  window.aetherAPI.onPresenceUpdate((_e, state) => renderPresence(state));
   window.aetherAPI.onFocusCapture(() => { captureInput.focus(); captureInput.select(); });
-  window.aetherAPI.getPresence().then(applyPresence);
+  window.aetherAPI.getPresence().then((s) => renderPresence(s));
 }
 
 document.addEventListener('keydown', (e) => {

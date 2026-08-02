@@ -12,6 +12,11 @@ let presenceState = {
   intensity: 0.5
 };
 
+function presenceKey(s) {
+  if (!s) return '';
+  return (s.expression || '') + '|' + (s.status || '') + '|' + Math.round((s.intensity || 0) * 100);
+}
+
 function createWindow() {
   const { width, height } = screen.getPrimaryDisplay().workAreaSize;
 
@@ -88,14 +93,17 @@ function registerShortcuts() {
   globalShortcut.register('CommandOrControl+Alt+A', () => showAndFocus());
 }
 
-// Presence
+// Presence: only broadcast when state actually changes (stops IPC thrash)
 ipcMain.on('set-presence', (_e, state) => {
-  presenceState = { ...presenceState, ...state };
-  if (mainWindow) mainWindow.webContents.send('presence-update', presenceState);
+  const next = { ...presenceState, ...state };
+  if (presenceKey(next) === presenceKey(presenceState)) return;
+  presenceState = next;
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    mainWindow.webContents.send('presence-update', presenceState);
+  }
 });
 ipcMain.handle('get-presence', () => presenceState);
 
-// P2: Real computer-use surfaces (gated by runtime confirmation)
 ipcMain.handle('computer-use-execute', async (_e, payload) => {
   const { action, details } = payload || {};
   try {
@@ -114,7 +122,6 @@ ipcMain.handle('computer-use-execute', async (_e, payload) => {
       return { ok: true, action: 'screenshot', path: file, size: png.length };
     }
     if (action === 'list_windows') {
-      // Limited without extra native modules — return display info
       const displays = screen.getAllDisplays().map(d => ({
         id: d.id,
         bounds: d.bounds,
