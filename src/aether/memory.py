@@ -11,7 +11,7 @@ import base64
 import json
 import os
 import uuid
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 from pathlib import Path
 from typing import Any
 
@@ -47,6 +47,21 @@ def _now() -> str:
     return datetime.now(timezone.utc).isoformat()
 
 
+def _jsonable(obj: Any) -> Any:
+    """Convert PG/native types so results are always JSON-serializable."""
+    if isinstance(obj, dict):
+        return {k: _jsonable(v) for k, v in obj.items()}
+    if isinstance(obj, (list, tuple)):
+        return [_jsonable(v) for v in obj]
+    if isinstance(obj, datetime):
+        return obj.isoformat()
+    if isinstance(obj, date):
+        return obj.isoformat()
+    if isinstance(obj, uuid.UUID):
+        return str(obj)
+    return obj
+
+
 def _get_fernet() -> Any | None:
     if not _HAS_CRYPTO:
         return None
@@ -72,7 +87,6 @@ def _get_fernet() -> Any | None:
 
 
 def _default_dsn() -> str:
-    # Prefer explicit env; default matches the user's running Postgres instance
     return os.getenv(
         "AETHER_DATABASE_URL",
         "postgresql://postgres:postgres@127.0.0.1:5432/postgres",
@@ -152,7 +166,7 @@ class GovernedMemoryStore:
         val = row["value"]
         if isinstance(val, str):
             val = json.loads(val)
-        return val
+        return _jsonable(val) if isinstance(val, dict) else val
 
     def _pg_write(self, fact: dict[str, Any]) -> dict[str, Any]:
         assert self._pg is not None
@@ -212,7 +226,7 @@ class GovernedMemoryStore:
         ).fetchall()
         results = []
         for r in rows:
-            fact = dict(r)
+            fact = _jsonable(dict(r))
             if isinstance(fact.get("meta"), str):
                 try:
                     fact["meta"] = json.loads(fact["meta"])
@@ -401,7 +415,7 @@ class GovernedMemoryStore:
                 """,
                 (min_confidence, max_facts),
             ).fetchall()
-            candidates = [dict(r) for r in rows]
+            candidates = [_jsonable(dict(r)) for r in rows]
         else:
             candidates = sorted(
                 [f for f in self._session if float(f.get("confidence", 0)) >= min_confidence],
@@ -418,6 +432,14 @@ class GovernedMemoryStore:
             new_fact["created_at"] = _now()
             new_fact["last_accessed"] = _now()
             new_fact["retention_days"] = int(new_fact.get("retention_days") or 365)
+            # Drop non-contract keys that may confuse write validation paths
+            for k in list(new_fact.keys()):
+                if k not in REQUIRED_FIELDS and k not in (
+                    "id", "feedback_score", "feedback_count", "tags", "meta"
+                ):
+                    # keep known extras only
+                    if k in ("feedback_score", "feedback_count", "tags", "meta", "id"):
+                        continue
             self.write(new_fact)
             promoted.append(new_fact)
 
