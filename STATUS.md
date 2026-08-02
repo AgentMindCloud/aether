@@ -1,39 +1,43 @@
-# Aether Status — 2026-08-02 (P3 complete)
+# Aether Status — 2026-08-02 (P4 complete)
+
+## Architecture decision (locked)
+
+**Aether brain stays local and owned.**  
+n8n / Supabase are optional *tools*, never the core memory or orchestration brain.  
+Hybrid voice + UI buttons + GitHub actions + modular LLM slots are first-class inside the existing Electron + Python + `.grok/` design.
 
 ## Ready
 
-### P0–P2
-- [x] Clean scaffold, contracts, kill switch, presence loop
-- [x] First-use, Action Plan / Make it real, IPC bridge
-- [x] Voice Think Fast 2.0 path, governed memory, content tools
-- [x] Real screenshot surface behind spoken confirmation
+### P0–P3
+- [x] Presence shell, contracts, kill switch, voice path, encrypted memory, proactive, packaging
 
-### P3
-- [x] **Encrypted memory at rest** — optional Fernet (`pip install aether[crypto]` or `cryptography`); auto local key in `~/.aether/memory.key`
-- [x] **Proactive engine** — opt-in, cooldown, daily cap, mention-spike / engagement / scheduled evaluate (`/proactive/*`)
-- [x] **Voice partials + Realtime structure** — `/voice/partial`, streaming-ready session status, latency-aware path
-- [x] **Packaging foundation** — electron-builder config, `npm run dist` / `dist:win` / `dist:mac` / `dist:linux`
-- [x] Version bumped to **0.3.0**
-- [x] Richer health payload (voice live, realtime_ready, memory encryption, proactive status)
+### P4 (from console.x.ai voice-agent input — filtered)
+- [x] **LLM abstraction** — `.grok/models.yaml` + `/model` + `/switch-model` + `AETHER_MODEL` env
+- [x] **Tool registry expansion** — GitHub issues/PRs/create-issue staged tools
+- [x] **Optional n8n webhook tool** — explicit external orchestration only; memory never leaves Aether
+- [x] **Hybrid action suggestions** — voice turns return `suggested_actions` for floating UI buttons
+- [x] Version **0.4.0**
 
-## Run P3
+## Explicit non-goals (still)
+
+- Supabase / Postgres as primary memory
+- n8n as the agent brain
+- Dual-runtime ownership split
+
+## Run
 
 ```bash
-pip install -e ".[crypto]"   # optional encryption
+pip install -e ".[crypto]"
 aether --demo
 aether --serve
-
-cd shell && npm install && npm start
-# Package:
-cd shell && npm run dist
+cd shell && npm start
 ```
 
-## Next (post-P3)
+## Next high-leverage
 
-- Live WebSocket streaming against production Grok Voice Realtime endpoints
-- Richer computer-use (type/click/focus) via platform APIs
-- OS keychain integration for memory key
-- Signed builds + auto-update
-- Real X mention/engagement feed into proactive evaluator
+- Live GitHub connector calls (use platform GitHub tools for real list/create)
+- Panel UI for suggested_actions + recent audit
+- Real Grok Voice Realtime WebSocket when keys present
+- Richer computer-use (type/click) behind existing gates
 
-**P3 goal achieved: encryption, proactive, voice partials/Realtime structure, and packaging are in place.**
+**P4 goal achieved: modular model, GitHub tools, optional n8n, hybrid suggestions — without surrendering ownership.**

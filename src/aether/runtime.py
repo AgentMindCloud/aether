@@ -1,7 +1,7 @@
-"""Aether runtime — P0 → P3.
+"""Aether runtime — P0 → P4.
 
-P3 adds: encrypted memory, proactive engine, voice partials / realtime structure,
-richer IPC, packaging readiness.
+P4: modular LLM abstraction, GitHub tools, optional n8n webhook,
+hybrid action readiness. Core remains local + owned.
 """
 
 from __future__ import annotations
@@ -10,7 +10,6 @@ import argparse
 import json
 import os
 import sys
-import time
 import uuid
 from datetime import datetime, timezone
 from http.server import BaseHTTPRequestHandler, HTTPServer
@@ -21,8 +20,10 @@ from aether.voice import voice_client
 from aether.memory import memory_store
 from aether.proactive import proactive_engine
 from aether import content as content_tools
+from aether import models as model_layer
+from aether import github_tools
 
-VERSION = "0.3.0"
+VERSION = "0.4.0"
 
 
 def check_kill_switch() -> None:
@@ -56,61 +57,20 @@ def _now_iso() -> str:
 
 
 _PRIORITY: list[dict[str, Any]] = [
-    {
-        "id": "p1",
-        "title": "Run first live voice session with Think Fast 2.0 key",
-        "meta": "High impact · Now",
-        "level": "high",
-        "source": "system",
-        "created_at": _now_iso(),
-    },
-    {
-        "id": "p2",
-        "title": "Confirm encrypted memory + opt into proactive",
-        "meta": "Safety · Today",
-        "level": "medium",
-        "source": "system",
-        "created_at": _now_iso(),
-    },
+    {"id": "p1", "title": "Switch model config + run first live voice session", "meta": "High impact · Now", "level": "high", "source": "system", "created_at": _now_iso()},
+    {"id": "p2", "title": "Wire GitHub list issues for AgentMindCloud/aether", "meta": "Builder · Today", "level": "high", "source": "system", "created_at": _now_iso()},
 ]
 
 _BOOKMARKS: list[dict[str, Any]] = [
     {
-        "id": "b1",
-        "category": "Immediate",
-        "title": "Grok Voice Realtime path — stream first session",
-        "source": "x.ai",
-        "score": 9.6,
-        "plan": [
-            "Set GROK_VOICE_API_KEY",
-            "aether --serve + shell",
-            "Start voice session and verify presence states",
-            "Test partial transcript path",
-        ],
+        "id": "b1", "category": "Immediate", "title": "Modular model swap + GitHub actions live",
+        "source": "Aether P4", "score": 9.4,
+        "plan": ["POST /switch-model", "GET /model", "Call /github/issues for aether", "Optional n8n webhook only as tool"],
     },
     {
-        "id": "b2",
-        "category": "Act soon",
-        "title": "Proactive opt-in + first mention-spike offer",
-        "source": "Aether",
-        "score": 8.8,
-        "plan": [
-            "POST /proactive/opt-in",
-            "Feed sample signals to /proactive/evaluate",
-            "Accept one offer into Priority",
-        ],
-    },
-    {
-        "id": "b3",
-        "category": "Possibility",
-        "title": "Package shell with electron-builder",
-        "source": "Aether",
-        "score": 8.0,
-        "plan": [
-            "cd shell && npm run dist",
-            "Verify tray app on target OS",
-            "Document unsigned-build warning",
-        ],
+        "id": "b2", "category": "Act soon", "title": "Hybrid voice + action buttons (commit/PR later)",
+        "source": "Aether", "score": 8.7,
+        "plan": ["Keep confirmation gates", "Surface suggested actions after voice turns", "Dashboard of recent audit events"],
     },
 ]
 
@@ -127,19 +87,28 @@ def _audit(event: str, payload: dict[str, Any]) -> None:
 def start_voice_session(user_id: str, mode: str = "reactive") -> dict[str, Any]:
     check_kill_switch()
     result = voice_client.start_session(user_id, mode)
+    result["model"] = model_layer.get_model()
     _audit("session_start", {"session_id": result.get("session_id"), "live": result.get("live")})
     return result
 
 
-def handle_turn(
-    session_id: str,
-    transcript: str,
-    x_context: list[dict] | None = None,
-) -> dict[str, Any]:
+def handle_turn(session_id: str, transcript: str, x_context: list[dict] | None = None) -> dict[str, Any]:
     check_kill_switch()
     memories = memory_store.query(transcript, max_records=3)
     result = voice_client.process_turn(session_id, transcript, x_context, memories)
     result["memory_contracts"] = memories
+    result["model"] = model_layer.get_model()
+    # Lightweight context-aware action suggestions (hybrid UI signal)
+    t = transcript.lower()
+    suggestions = []
+    if any(w in t for w in ("issue", "github", "pr", "pull", "commit")):
+        suggestions.append({"action": "github_list_issues", "label": "List issues"})
+        suggestions.append({"action": "github_list_prs", "label": "List PRs"})
+    if any(w in t for w in ("screenshot", "screen", "capture")):
+        suggestions.append({"action": "computer_use_screenshot", "label": "Take screenshot"})
+    if any(w in t for w in ("thread", "post", "idea", "hook")):
+        suggestions.append({"action": "content_ideate", "label": "Ideate thread"})
+    result["suggested_actions"] = suggestions
     _audit("turn", {"session_id": session_id, "turns": result.get("turn")})
     return result
 
@@ -158,32 +127,27 @@ def update_presence(expression: str, status: str, intensity: float = 0.7) -> dic
     if status not in valid_status:
         status = "idle"
     intensity = max(0.0, min(1.0, float(intensity)))
-    return {
-        "expression": expression,
-        "status": status,
-        "intensity": intensity,
-        "avatar": "updated",
-        "timestamp": _now_iso(),
-    }
+    return {"expression": expression, "status": status, "intensity": intensity, "avatar": "updated", "timestamp": _now_iso()}
 
 
 def first_use_magic(user_id: str = "local") -> dict[str, Any]:
     check_kill_switch()
     insight = content_tools.audience_insight()
     moves = [
-        {"id": "m1", "title": "Start a live voice session", "why": "Presence becomes real with voice", "effort": "low", "impact": "high"},
-        {"id": "m2", "title": "Opt into proactive + run evaluate once", "why": "Unlock mention-spike offers", "effort": "low", "impact": "high"},
-        {"id": "m3", "title": "Confirm memory encryption + take one screenshot", "why": "Safety + computer-use gate verified", "effort": "low", "impact": "medium"},
+        {"id": "m1", "title": "Start live voice + check model", "why": "Presence + modular model path", "effort": "low", "impact": "high"},
+        {"id": "m2", "title": "List GitHub issues for a key repo", "why": "Builder actions without leaving presence", "effort": "low", "impact": "high"},
+        {"id": "m3", "title": "Opt into proactive; keep memory local", "why": "No Supabase required — owned brain", "effort": "low", "impact": "medium"},
     ]
     return {
         "type": "first_use_magic",
         "user_id": user_id,
-        "message": "Welcome. Signal snapshot and three concrete next moves.",
+        "message": "Welcome. Modular agent surface is live. Three next moves.",
         "audience_insight": insight,
         "moves": moves,
         "presence": {"expression": "pleased", "status": "speaking", "intensity": 0.8},
         "memory_stats": memory_store.stats(),
         "proactive": proactive_engine.status(),
+        "model": model_layer.model_status(),
         "timestamp": _now_iso(),
     }
 
@@ -195,14 +159,7 @@ def computer_use_request(action: str, details: dict[str, Any] | None = None) -> 
     if action not in allowed:
         return {"error": f"Unknown action: {action}", "allowed": list(allowed)}
     request_id = str(uuid.uuid4())[:8]
-    _PENDING_COMPUTER_USE = {
-        "request_id": request_id,
-        "action": action,
-        "details": details or {},
-        "status": "awaiting_spoken_confirmation",
-        "created_at": _now_iso(),
-        "expires_in_seconds": 20,
-    }
+    _PENDING_COMPUTER_USE = {"request_id": request_id, "action": action, "details": details or {}, "status": "awaiting_spoken_confirmation", "created_at": _now_iso(), "expires_in_seconds": 20}
     _audit("computer_use_request", {"request_id": request_id, "action": action})
     return {
         "status": "awaiting_spoken_confirmation",
@@ -223,13 +180,7 @@ def computer_use_confirm(request_id: str, spoken_yes: bool = True) -> dict[str, 
     _PENDING_COMPUTER_USE = None
     if not spoken_yes:
         _audit("computer_use_cancelled", {"request_id": request_id})
-        return {
-            "status": "cancelled",
-            "request_id": request_id,
-            "action": pending["action"],
-            "message": "Cancelled. No changes made.",
-            "timestamp": _now_iso(),
-        }
+        return {"status": "cancelled", "request_id": request_id, "action": pending["action"], "message": "Cancelled. No changes made.", "timestamp": _now_iso()}
     result = {
         "status": "confirmed_execute",
         "request_id": request_id,
@@ -257,93 +208,42 @@ def make_it_real(bookmark_id: str) -> dict[str, Any]:
     bm = next((b for b in _BOOKMARKS if b["id"] == bookmark_id), None)
     if not bm:
         return {"error": f"Bookmark {bookmark_id} not found"}
-    new_item = {
-        "id": f"p-{uuid.uuid4().hex[:6]}",
-        "title": bm["title"],
-        "meta": f"From Bookmark · {bm['category']} · just now",
-        "level": "high",
-        "source": "make_it_real",
-        "plan": bm.get("plan", []),
-        "created_at": _now_iso(),
-    }
+    new_item = {"id": f"p-{uuid.uuid4().hex[:6]}", "title": bm["title"], "meta": f"From Bookmark · {bm['category']} · just now", "level": "high", "source": "make_it_real", "plan": bm.get("plan", []), "created_at": _now_iso()}
     _PRIORITY.insert(0, new_item)
     _audit("make_it_real", {"bookmark_id": bookmark_id})
-    return {
-        "status": "promoted",
-        "priority_item": new_item,
-        "message": f"‘{bm['title']}’ is now in Priority as high impact.",
-        "presence": {"expression": "pleased", "status": "speaking", "intensity": 0.7},
-        "timestamp": _now_iso(),
-    }
+    return {"status": "promoted", "priority_item": new_item, "message": f"‘{bm['title']}’ is now in Priority as high impact.", "presence": {"expression": "pleased", "status": "speaking", "intensity": 0.7}, "timestamp": _now_iso()}
 
 
 def add_priority(title: str, level: str = "high") -> dict[str, Any]:
     check_kill_switch()
-    item = {
-        "id": f"p-{uuid.uuid4().hex[:6]}",
-        "title": title,
-        "meta": "Just captured · Now",
-        "level": level,
-        "source": "capture",
-        "created_at": _now_iso(),
-    }
+    item = {"id": f"p-{uuid.uuid4().hex[:6]}", "title": title, "meta": "Just captured · Now", "level": level, "source": "capture", "created_at": _now_iso()}
     _PRIORITY.insert(0, item)
     return {"status": "added", "item": item}
 
 
 def run_demo() -> None:
     print("\n════════════════════════════════════════════════════════════")
-    print(f"  AETHER  ·  P3 demo  ·  v{VERSION}")
+    print(f"  AETHER  ·  P4 demo  ·  v{VERSION}")
     print("════════════════════════════════════════════════════════════\n")
-
-    print("→ Kill switch …")
     check_kill_switch()
-    print("  ✓ clear\n")
-
-    print("→ Voice session (Realtime-ready path) …")
+    print("→ Model status …")
+    print(json.dumps(model_layer.model_status(), indent=2), "\n")
+    print("→ Switch model (demo) …")
+    print(json.dumps(model_layer.switch_model("grok-4.20-multi-agent"), indent=2), "\n")
     sess = start_voice_session("demo-user")
+    print("→ Voice session …")
     print(json.dumps(sess, indent=2), "\n")
-
-    print("→ Partial transcript …")
-    print(json.dumps(handle_partial(sess["session_id"], "I want to"), indent=2), "\n")
-
-    print("→ First-use + proactive status …")
-    print(json.dumps(first_use_magic(), indent=2), "\n")
-
-    print("→ Memory write (encrypted if cryptography present) …")
-    memory_store.write({
-        "content": "User prefers short calm voice answers under 35 words.",
-        "source": "user_said",
-        "confidence": 0.94,
-        "scope": "session",
-        "retention_days": 0,
-        "write_permission": "user_only",
-        "created_at": _now_iso(),
-        "last_accessed": _now_iso(),
-    })
+    print("→ Turn with suggested actions …")
+    print(json.dumps(handle_turn(sess["session_id"], "Show me GitHub issues and maybe a screenshot"), indent=2), "\n")
+    print("→ GitHub list issues (connector-ready) …")
+    print(json.dumps(github_tools.list_issues("AgentMindCloud", "aether"), indent=2), "\n")
+    print("→ Memory stats …")
     print(json.dumps(memory_store.stats(), indent=2), "\n")
-
-    print("→ Voice turn …")
-    print(json.dumps(handle_turn(sess["session_id"], "Remember I like short answers. Next move?"), indent=2), "\n")
-
-    print("→ Proactive opt-in + evaluate …")
-    proactive_engine.set_opt_in(True)
-    print(json.dumps(proactive_engine.evaluate({"mention_count_15m": 7}), indent=2), "\n")
-
-    print("→ Content ideation …")
-    print(json.dumps(content_tools.ideate_thread("presence agents"), indent=2), "\n")
-
-    print("→ Computer-use request + confirm …")
-    req = computer_use_request("screenshot", {"reason": "P3"})
-    print(json.dumps(req, indent=2))
-    print(json.dumps(computer_use_confirm(req["request_id"], True), indent=2), "\n")
-
-    print("→ Make it real …")
-    print(json.dumps(make_it_real("b1"), indent=2), "\n")
-
+    print("→ First-use …")
+    print(json.dumps(first_use_magic(), indent=2), "\n")
     print("════════════════════════════════════════════════════════════")
-    print("  P3 demo complete.")
-    print("  Encrypted memory · proactive · voice partials · packaging ready")
+    print("  P4 complete. Modular model · GitHub tools · optional n8n · hybrid suggestions")
+    print("  Memory stays local. n8n is a tool, not the brain.")
     print("════════════════════════════════════════════════════════════\n")
 
 
@@ -370,13 +270,10 @@ class AetherHandler(BaseHTTPRequestHandler):
             check_kill_switch()
             if path == "/health":
                 self._json(200, {
-                    "status": "ok",
-                    "version": VERSION,
-                    "p": "P3",
-                    "voice_live": voice_client.live,
-                    "realtime_ready": voice_client.realtime_ready,
-                    "memory": memory_store.stats(),
-                    "proactive": proactive_engine.status(),
+                    "status": "ok", "version": VERSION, "p": "P4",
+                    "voice_live": voice_client.live, "realtime_ready": voice_client.realtime_ready,
+                    "memory": memory_store.stats(), "proactive": proactive_engine.status(),
+                    "model": model_layer.model_status(),
                 })
             elif path == "/priority":
                 self._json(200, {"items": list_priority()})
@@ -390,6 +287,8 @@ class AetherHandler(BaseHTTPRequestHandler):
                 self._json(200, memory_store.stats())
             elif path == "/proactive/status":
                 self._json(200, proactive_engine.status())
+            elif path == "/model":
+                self._json(200, model_layer.model_status())
             elif path == "/audit":
                 self._json(200, {"events": _AUDIT[-40:]})
             else:
@@ -406,7 +305,6 @@ class AetherHandler(BaseHTTPRequestHandler):
         except json.JSONDecodeError:
             self._json(400, {"error": "invalid json"})
             return
-
         try:
             check_kill_switch()
             if path in ("/session/start", "/voice/start"):
@@ -443,6 +341,16 @@ class AetherHandler(BaseHTTPRequestHandler):
                 self._json(200, content_tools.suggest_replies(data.get("post", ""), data.get("voice", "builder")))
             elif path == "/content/insight":
                 self._json(200, content_tools.audience_insight(data.get("niche", "AI agents / builders")))
+            elif path == "/switch-model":
+                self._json(200, model_layer.switch_model(data.get("model", "")))
+            elif path == "/github/issues":
+                self._json(200, github_tools.list_issues(data.get("owner", "AgentMindCloud"), data.get("repo", "aether"), data.get("state", "open")))
+            elif path == "/github/prs":
+                self._json(200, github_tools.list_prs(data.get("owner", "AgentMindCloud"), data.get("repo", "aether"), data.get("state", "open")))
+            elif path == "/github/issue/create":
+                self._json(200, github_tools.create_issue(data.get("owner", ""), data.get("repo", ""), data.get("title", ""), data.get("body", "")))
+            elif path == "/n8n/webhook":
+                self._json(200, github_tools.n8n_webhook(data.get("url", ""), data.get("payload"), data.get("method", "POST")))
             else:
                 self._json(404, {"error": "not found"})
         except (RuntimeError, ValueError) as e:
@@ -455,8 +363,8 @@ class AetherHandler(BaseHTTPRequestHandler):
 def run_serve(host: str = "127.0.0.1", port: int = 7420) -> None:
     check_kill_switch()
     server = HTTPServer((host, port), AetherHandler)
-    print(f"Aether P3 IPC on http://{host}:{port}  (v{VERSION})")
-    print("Voice · Memory(encrypted) · Proactive · Content · Computer-use · Audit")
+    print(f"Aether P4 IPC on http://{host}:{port}  (v{VERSION})")
+    print("Model · Voice · Memory · Proactive · GitHub · Content · n8n(optional) · Audit")
     print("Ctrl+C to stop.\n")
     try:
         server.serve_forever()
@@ -473,7 +381,6 @@ def main() -> None:
     parser.add_argument("--serve", action="store_true")
     parser.add_argument("--port", type=int, default=7420)
     args = parser.parse_args()
-
     if args.demo:
         run_demo()
         return
@@ -487,6 +394,7 @@ def main() -> None:
             for k, v in found.items():
                 print(f"  {k}: {v}")
             print("Memory:", memory_store.stats())
+            print("Model:", model_layer.model_status())
         except EnvironmentError as e:
             print(e, file=sys.stderr)
             sys.exit(1)
@@ -499,12 +407,10 @@ def main() -> None:
             print(e, file=sys.stderr)
             sys.exit(1)
         return
-
     parser.print_help()
-    print(f"\n  aether --demo          # P3 offline loop (v{VERSION})")
+    print(f"\n  aether --demo   # P4 offline (v{VERSION})")
     print("  aether --serve")
     print("  cd shell && npm start")
-    print("  cd shell && npm run dist   # package with electron-builder")
 
 
 if __name__ == "__main__":
