@@ -1,74 +1,48 @@
-# Aether Status — Build 0.1 (Felt Presence)
+# Aether Status — Build 0.1 FINISHED (Presence)
 
-**Date:** 2026-08-02  
-**Branch / focus:** `build/0.1-felt-presence` → vertical slice that *feels* like the product.
+**Date:** 2026-08-03  
+**Decision:** Aether is the **presence surface only**. Super Grok Voice Agent is a **separate project**. Aether does not need to speak.
 
-## What works now (acceptance targets)
+## Done criteria
 
-| Test | Status |
+| Item | Status |
 |------|--------|
-| `cd shell && npm start` auto-ensures runtime on :7420 | Hardened (aether / py / python fallbacks + PYTHONPATH) |
-| Start Session → type or speak → agent replies | Yes |
-| Agent reply is **audible** via Web Speech TTS | Yes (no key required) |
-| Mic → Web Speech STT → turn (when permission granted) | Yes |
-| Orb: listening → thinking → speaking → listening (no flicker loops) | Yes |
-| Premium dark presence UI (hierarchy, glass, motion, transcript first-class) | Yes |
-| Memory-aware short/calm replies with one next action | Yes (sim path; uses memory query results) |
-| Kill switch `AETHER_DISABLED=1` | Intact |
-| Governed memory + Postgres / file fallback | Intact |
+| Electron tray + panel + Ctrl+Alt+A | Done |
+| Auto-spawn Python runtime `:7420` | Done |
+| Text session turns (memory-aware sim) | Done |
+| Priority / Bookmarks / Make it real | Done |
+| Postgres memory + file fallback | Done |
+| Kill switch `AETHER_DISABLED=1` | Done |
+| **Windows Desktop shortcut** | Done — run `shell/create-desktop-shortcut.ps1` once |
+| One-click launch (no manual PowerShell path) | Done — Desktop “Aether” or `Start-Aether.vbs` |
 
-## Voice path (honest)
+## How to run (Windows 11)
 
-| Layer | State |
-|-------|--------|
-| Agent text replies | High-quality sim (short, calm, concrete, next-action) |
-| TTS playback | **Web Speech API** in renderer — user hears the agent |
-| Mic / STT | **Web Speech Recognition** (Chrome/Electron) |
-| Grok Voice Think Fast 2.0 / Realtime | Structure ready; requires `GROK_VOICE_API_KEY` + streaming client (not blocking this slice) |
-
-Upgrade path: set `GROK_VOICE_API_KEY`, then wire Realtime WS in `voice.py` + stream audio to shell. Same `/voice/*` endpoints.
-
-## Run (one block)
+**Once:**
 
 ```powershell
-# From repo root (once)
-docker compose up -d
-pip install -e ".[db,crypto]"
-
-# Daily
+cd C:\Users\louis\aether
+git pull origin main
 cd shell
-npm start
-# Shell auto-spawns runtime. If offline, status bar shows recovery hint.
+npm install
+powershell -ExecutionPolicy Bypass -File .\create-desktop-shortcut.ps1
 ```
 
-Manual runtime if needed:
+Also from repo root (once): `docker compose up -d` and `pip install -e ".[db,crypto]"` if not already.
 
-```powershell
-aether --serve
-# or: py -m aether.runtime --serve
-```
+**Daily:** double-click **Aether** on the Desktop.
 
-## Architecture (unchanged)
+## Scope freeze (do not expand)
 
-```
-Electron shell (tray + panel + hotkeys + TTS/STT)
-    ↔ HTTP JSON :7420
-Python runtime (intelligence, memory, safety)
-    ↔ Postgres (facts, consent) / file fallback
-    ↔ Ollama (optional)
-    ↔ Grok Voice API (live when keyed)
-```
+- No Super Agent tools/jobs here
+- No requirement for natural voice TTS
+- No Supabase, no n8n core
+- Mobile = future thin client to same HTTP API only
 
-**Mobile later:** same HTTP API. Bind with `AETHER_HOST=0.0.0.0`.
+## Super Agent
 
-## Explicit non-goals this slice
-
-- Full mobile app
-- Full X firehose
-- Multi-agent swarm rewrite
-- Marketplace / grok-install packaging
-- Tauri migration
+See `docs/SUPER_GROK_VOICE_AGENT_PROMPT.md` — build in a **new repo**. Optional later: Aether calls Partner HTTP API.
 
 ## Version
 
-**0.6.0** — Build 0.1 felt presence
+**0.6.1** — Build 0.1 finished (presence + desktop launch)

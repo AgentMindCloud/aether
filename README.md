@@ -1,81 +1,61 @@
 # Aether
 
-**Desktop presence operating surface for high-agency builders.**
+**Desktop presence surface** for high-agency builders.
 
-Always-available tray + floating panel with real-time talk, governed memory, gated computer-use, and an Action Plan loop — *think with me, not just do for me*.
+Tray + floating panel + hotkeys. Governed local memory. Text talk loop. Action plans.
 
-**v0.6.0 — Build 0.1 Felt Presence**  
-Owned by you. Not affiliated with xAI / Grok / X.
+**v0.6.1 — Build 0.1 finished.**  
+Voice partner / Super Agent is a **separate project**. Aether does not need to speak.
+
+Not affiliated with xAI / Grok / X.
 
 ---
 
-## Quick start
+## Windows 11 — one-time setup
 
-```bash
-git clone https://github.com/AgentMindCloud/aether.git
-cd aether
+```powershell
+cd C:\Users\louis\aether
+git pull
 docker compose up -d
 pip install -e ".[db,crypto]"
-cd shell && npm install && npm start
+cd shell
+npm install
+powershell -ExecutionPolicy Bypass -File .\create-desktop-shortcut.ps1
 ```
 
-One command brings brain + face online. The shell auto-spawns the Python runtime on `:7420`.
+Then double-click **Aether** on your Desktop every day.
 
-**Talk path (no API key required):**
-1. Click **Start Session**
-2. Type a message (or use the mic button)
-3. Agent replies in the session panel **and speaks** via system TTS
+Fallback: `shell\Start-Aether.vbs` (no console) or `shell\Start-Aether.bat`.
 
-Optional live Grok Voice later: set `GROK_VOICE_API_KEY` in `.env`.
+Hotkey: **Ctrl+Alt+A** focuses capture.
 
 ---
 
-## What works (Build 0.1)
+## What it is / is not
 
-- Premium dark presence UI (orb states, glass, motion, transcript-first)
-- Start Session → high-quality short replies (memory-aware when facts exist)
-- **Audible agent** via Web Speech TTS
-- Mic input via Web Speech Recognition (permission-gated)
-- Governed memory (Postgres primary, file fallback)
-- Priority / Bookmarks / Make it real
-- Computer-use screenshot (gated)
-- Kill switch `AETHER_DISABLED=1`
-- Auto-spawn runtime with Windows-friendly fallbacks
-
-See [STATUS.md](STATUS.md) for acceptance table and honest gaps.
+| Is | Is not |
+|----|--------|
+| Presence panel + tray | Super autonomous agent |
+| Local Postgres memory | Supabase required |
+| Text sessions + priority | Product voice partner (see Partner repo) |
+| Kill switch + gated computer-use stub | n8n brain |
 
 ---
 
 ## Architecture
 
 ```
-Electron shell (tray · panel · hotkeys · TTS/STT)
-     │ HTTP :7420
-     ▼
-Python runtime
-  · Voice (sim + Think Fast 2.0 path)
-  · Governed memory → Postgres / file
-  · Learning (feedback + distill)
-  · Ollama · Proactive · GitHub · Content
-  · Computer-use gates · Kill switch · Audit
+Desktop shortcut → Electron shell
+                      ↔ HTTP :7420
+                   Python runtime + Postgres
 ```
 
-**Mobile later:** same HTTP API. `AETHER_HOST=0.0.0.0` for LAN.
+---
+
+## Super Grok Voice Agent
+
+Build separately. Handoff prompt: [docs/SUPER_GROK_VOICE_AGENT_PROMPT.md](docs/SUPER_GROK_VOICE_AGENT_PROMPT.md).
 
 ---
 
-## Key endpoints
-
-| Area | Endpoints |
-|------|-----------|
-| Voice | `/voice/start` `/voice/turn` `/voice/partial` `/voice/end` |
-| Memory | `/memory/write` `/memory/query` `/memory/consent` `/memory/stats` |
-| Learning | `/learning/feedback` `/learning/distill` `/learning/status` |
-| Priority | `/priority` `/priority/add` `/make-it-real` |
-| Computer-use | `/computer-use/request` `/computer-use/confirm` |
-
----
-
-## Safety
-
-Single Constitution + kill switch. Computer-use always requires spoken (or explicit) confirmation before shell execution.
+See [STATUS.md](STATUS.md).
