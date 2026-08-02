@@ -72,10 +72,10 @@ body {
 
 .presence-section {
   display: flex; flex-direction: column; align-items: center;
-  padding: 20px 16px 12px; gap: 10px;
+  padding: 16px 16px 8px; gap: 8px;
 }
 .presence-orb {
-  width: 72px; height: 72px; border-radius: 50%;
+  width: 64px; height: 64px; border-radius: 50%;
   background: radial-gradient(circle at 30% 30%, rgba(99,102,241,0.35), rgba(99,102,241,0.08));
   border: 1px solid rgba(99,102,241,0.25);
   display: flex; align-items: center; justify-content: center;
@@ -100,7 +100,7 @@ body {
   background: radial-gradient(circle at 30% 30%, rgba(168,85,247,0.45), rgba(168,85,247,0.12));
 }
 .orb-inner {
-  width: 34px; height: 34px; border-radius: 50%;
+  width: 30px; height: 30px; border-radius: 50%;
   background: linear-gradient(145deg, #6366f1, #8b5cf6); opacity: 0.85;
 }
 .presence-meta { text-align: center; }
@@ -110,7 +110,7 @@ body {
 }
 .presence-expression { font-size: 11px; color: var(--text-muted); margin-top: 2px; }
 
-.capture { padding: 2px 16px 10px; }
+.capture { padding: 2px 16px 8px; }
 .section-label {
   font-size: 10.5px; font-weight: 650; letter-spacing: 0.7px;
   color: var(--text-muted); margin-bottom: 8px; text-transform: uppercase;
@@ -139,6 +139,41 @@ body {
 }
 .capture-btn:hover { background: linear-gradient(145deg, #818cf8, #6366f1); }
 .capture-hint { font-size: 11px; color: var(--text-muted); margin-top: 6px; }
+
+.talk-log {
+  padding: 0 16px 8px;
+  max-height: 140px;
+  display: flex;
+  flex-direction: column;
+}
+.talk-log.hidden { display: none; }
+.talk-messages {
+  overflow-y: auto;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 4px 0;
+}
+.talk-bubble {
+  font-size: 12.5px;
+  line-height: 1.4;
+  padding: 8px 10px;
+  border-radius: 10px;
+  max-width: 95%;
+}
+.talk-bubble.user {
+  align-self: flex-end;
+  background: rgba(99,102,241,0.2);
+  border: 1px solid rgba(99,102,241,0.25);
+  color: var(--text-primary);
+}
+.talk-bubble.agent {
+  align-self: flex-start;
+  background: rgba(255,255,255,0.04);
+  border: 1px solid var(--border);
+  color: var(--text-secondary);
+}
 
 .view { display: none; flex-direction: column; flex: 1; overflow: hidden; padding: 0 12px; }
 .view.active { display: flex; }
@@ -253,6 +288,7 @@ body {
   box-shadow: 0 4px 12px rgba(99,102,241,0.3);
 }
 .footer-btn.primary:hover { background: linear-gradient(145deg, #818cf8, #6366f1); }
+.footer-btn:disabled { opacity: 0.55; cursor: not-allowed; }
 
 .modal {
   position: fixed; inset: 0; background: rgba(0,0,0,0.55);

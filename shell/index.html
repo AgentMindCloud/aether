@@ -33,12 +33,17 @@
     </section>
 
     <section class="capture">
-      <div class="section-label">QUICK CAPTURE</div>
+      <div class="section-label" id="captureLabel">QUICK CAPTURE</div>
       <div class="capture-box">
         <input type="text" id="captureInput" placeholder="Capture a thought or next move…" />
         <button class="capture-btn" id="captureBtn">+</button>
       </div>
-      <div class="capture-hint">Ctrl + Alt + A · or type and press Enter</div>
+      <div class="capture-hint" id="captureHint">Ctrl + Alt + A · or type and press Enter</div>
+    </section>
+
+    <section class="talk-log hidden" id="talkLog">
+      <div class="section-label">SESSION</div>
+      <div class="talk-messages" id="talkMessages"></div>
     </section>
 
     <section class="view active" id="priorityView">
@@ -73,7 +78,6 @@
     </footer>
   </div>
 
-  <!-- Make it real modal -->
   <div class="modal hidden" id="planModal">
     <div class="modal-content">
       <div class="modal-header">
