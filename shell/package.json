@@ -1,7 +1,7 @@
 {
   "name": "aether-shell",
-  "version": "0.3.0",
-  "description": "Aether desktop presence shell — tray + floating panel + hotkeys",
+  "version": "0.6.0",
+  "description": "Aether desktop presence shell — tray + floating panel + hotkeys + TTS",
   "main": "main.js",
   "author": "AgentMindCloud",
   "license": "Apache-2.0",
