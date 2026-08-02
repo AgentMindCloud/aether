@@ -1,0 +1,47 @@
+voice:
+  enabled: true
+  mode: real-time-conversation
+  engine: grok-voice-think-fast-2.0   # current as of Aug 2026
+
+  features:
+    real_time_conversation: true
+    emotion_aware: true
+    speaker_diarization: true
+    interruption_detection: true
+    barge_in: true
+    end_of_turn_prediction: true
+
+  stt:
+    model: grok-stt-2
+    language_detect: auto
+    continuous: true
+    partial_transcripts: true
+    vad_sensitivity: 0.6
+    confidence_floor: 0.55
+
+  tts:
+    voice_id: ember
+    style: warm-conversational
+    pacing:
+      words_per_minute: 170
+      pause_after_sentence_ms: 260
+    dynamic_emotion: true
+
+  session:
+    max_duration_seconds: 240
+    idle_timeout_seconds: 25
+    on_timeout: graceful_handoff_to_text
+    max_concurrent_sessions_per_user: 1
+
+  fallback:
+    mode: text-only
+    trigger_on:
+      - network_degraded
+      - stt_confidence_below_floor
+      - user_requests_text
+      - answer_longer_than_35_words
+
+  latency_budget:
+    stt_ms: 350
+    reasoning_ms: 2800
+    tts_first_audio_ms: 400

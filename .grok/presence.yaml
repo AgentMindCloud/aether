@@ -1,0 +1,24 @@
+presence:
+  expressions:
+    - calm
+    - attentive
+    - thoughtful
+    - pleased
+    - concerned
+    - neutral
+  statuses:
+    - listening
+    - thinking
+    - speaking
+    - idle
+    - proactive
+  default:
+    expression: neutral
+    status: idle
+    intensity: 0.5
+  update_on:
+    - session_start
+    - turn_start
+    - turn_end
+    - emotion_change
+    - proactive_trigger

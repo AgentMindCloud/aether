@@ -1,0 +1,36 @@
+permissions:
+  scopes:
+    - voice:stt
+    - voice:tts
+    - read:dms
+    - read:mentions
+    - post:reply
+    - memory:read
+    - memory:write
+    - presence:update
+    - computer_use:request
+    - computer_use:execute
+  network:
+    allow:
+      - api.x.com
+      - api.xai.com
+      - voice.xai.com
+    deny:
+      - "*"
+  storage:
+    allow:
+      - session-cache-encrypted
+      - user-memory-encrypted
+    deny:
+      - persistent-disk
+  requires_approval:
+    - post:reply
+    - computer_use:execute
+  non_approval_safety_controls:
+    - profanity_filter
+    - banned_categories
+    - per_session_duration_cap
+    - kill_switch
+    - audit_log
+    - memory_contracts
+    - spoken_confirmation_for_computer_use

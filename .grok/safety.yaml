@@ -1,0 +1,42 @@
+safety:
+  profile: standard
+  human_review_required: []
+  profanity_filter: true
+  banned_categories:
+    - medical_advice
+    - financial_advice
+    - explicit_content
+    - minors
+    - harassment
+    - self_harm
+    - election_misinformation
+  rate_limits:
+    max_replies_per_hour: 40
+    max_session_duration_seconds: 240
+    max_sessions_per_day: 60
+    max_sessions_per_user_per_day: 12
+  kill_switch:
+    env: AETHER_DISABLED
+    on_true: halt_all_voice_and_text
+  content_filters:
+    block_personal_data: true
+    block_unverified_claims: true
+    refuse_impersonation: true
+  audit:
+    log_every_turn: true
+    log_stt_confidence: true
+    log_memory_writes: true
+    log_computer_use: true
+    retention_days: 30
+  voice_specific:
+    refuse_to_mimic_real_voices: true
+    announce_ai_on_request: true
+    record_with_consent_only: true
+  computer_use:
+    require_spoken_confirmation: true
+    confirmation_timeout_seconds: 20
+    never_execute_without_confirm: true
+  constitution:
+    - I
+    - III
+    - VII

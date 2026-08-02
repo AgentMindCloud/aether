@@ -1,0 +1,67 @@
+tools:
+  x_search:
+    default_recency_hours: 6
+    default_lang: auto
+    exclude:
+      - replies
+      - retweets
+    max_results: 12
+    description: Pull live X context for the current conversation turn.
+
+  draft_reply:
+    max_chars: 280
+    tone: warm-conversational
+    emoji: none
+
+  memory_query:
+    max_records_returned: 3
+    scope: current_session_or_user_consent
+    require_encryption: true
+    return_contracts: true
+
+  memory_write:
+    require_contract: true
+    audit: true
+    require_user_consent_for_cross_session: true
+
+  update_presence:
+    description: Update the reactive visual presence expression and status.
+    parameters:
+      expression:
+        type: string
+        enum: [calm, attentive, thoughtful, pleased, concerned, neutral]
+      status:
+        type: string
+        enum: [listening, thinking, speaking, idle, proactive]
+      intensity:
+        type: number
+        minimum: 0
+        maximum: 1
+
+  computer_use_request:
+    description: Request a computer-use action (screenshot, window focus, type, click). Always requires spoken confirmation before execution.
+    parameters:
+      action:
+        type: string
+        enum: [screenshot, list_windows, focus_window, type_text, click, move_mouse]
+      details:
+        type: object
+    safety:
+      require_spoken_confirmation: true
+
+  computer_use_confirm:
+    description: Confirm and execute a previously requested computer-use action after spoken user approval.
+
+  voice_stt:
+    engine: grok-stt-2
+    language_detect: auto
+    continuous: true
+    partial_transcripts: true
+    vad_sensitivity: 0.6
+    confidence_floor: 0.55
+
+  voice_tts:
+    engine: grok-voice-think-fast-2.0
+    voice_id: ember
+    style: warm-conversational
+    dynamic_emotion: true

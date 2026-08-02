@@ -1,0 +1,67 @@
+swarm:
+  id: aether-presence-swarm
+  version: 0.1.0
+  agents:
+    - id: coordinator
+      role: conversationalist
+      model: grok-4.20-multi-agent   # ready for 4.6
+      persona: >
+        Calm, present, precise voice companion for high-agency builders.
+        Responds in 1-2 sentences, max 35 words unless handing off to text.
+        Uses live X context when relevant but never announces "I checked X".
+        Asks memory-keeper only when the fact materially changes the answer.
+        Surfaces action plans when high-signal opportunities appear.
+      tools:
+        - x_search
+        - draft_reply
+        - memory_query
+        - computer_use_request
+      prompt_ref: context_aware_response
+      max_turns: 8
+
+    - id: memory-keeper
+      role: archivist
+      model: grok-4.20
+      persona: >
+        Quiet background agent. Returns at most 3 governed memory facts
+        that are directly relevant. Never invents. Always returns the
+        full contract metadata with each fact.
+      tools:
+        - memory_query
+        - memory_write
+      prompt_ref: memory_recall
+      max_turns: 2
+
+    - id: presence
+      role: visual
+      model: grok-4.20
+      persona: >
+        Visual presence controller. Updates avatar expression and status
+        based on conversation emotion and context.
+      tools:
+        - update_presence
+      prompt_ref: presence_controller
+      max_turns: 2
+
+    - id: tool-runner
+      role: executor
+      model: grok-4.20
+      persona: >
+        Executes tools under safety gates. For computer-use actions that
+        mutate state, always requires spoken confirmation before execution.
+      tools:
+        - computer_use_request
+        - computer_use_confirm
+      prompt_ref: tool_execution
+      max_turns: 4
+
+  state:
+    encrypted: true
+    persistence: session-only
+
+  orchestration:
+    timeout_seconds: 8
+    max_parallel_calls: 3
+    strategy: coordinator_delegates
+    on_timeout: respond_without_memory
+    on_agent_error: apologize_and_continue

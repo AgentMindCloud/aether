@@ -1,0 +1,27 @@
+proactive:
+  enabled: true
+  description: Aether can initiate a voice session when high-signal events occur.
+
+  triggers:
+    - type: mention_spike
+      threshold: 5
+      window_minutes: 15
+      action: offer_voice_session
+    - type: high_engagement_reply_opportunity
+      min_impressions: 500
+      action: offer_voice_session
+    - type: user_scheduled
+      cron: "0 9 * * *"
+      action: morning_briefing_voice
+
+  policy:
+    max_proactive_sessions_per_day: 3
+    require_user_opt_in: true
+    cooldown_minutes: 120
+    never_interrupt_active_session: true
+    announce_reason: true   # "I noticed a spike in mentions about X — want to talk about it?"
+
+  safety:
+    respect_kill_switch: true
+    respect_rate_limits: true
+    log_every_initiation: true

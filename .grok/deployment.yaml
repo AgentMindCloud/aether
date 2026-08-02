@@ -1,0 +1,19 @@
+deployment:
+  target: desktop
+  runtime: grok-4.20-multi-agent
+  region: local
+  scaling:
+    min_instances: 1
+    max_instances: 1
+    concurrency_per_instance: 2
+  cost_controls:
+    cost_ceiling_usd_per_day: 8
+    cost_ceiling_usd_per_session: 0.20
+    on_ceiling_hit: halt_with_alert
+  observability:
+    logs: local + optional remote
+    traces: local
+    metrics: local
+    record_latency_percentiles: [p50, p90, p99]
+  rollout:
+    strategy: direct

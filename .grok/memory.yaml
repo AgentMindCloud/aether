@@ -1,0 +1,28 @@
+# Governed Memory Contracts — core elevation
+memory:
+  enabled: true
+  encryption_at_rest: true
+  default_persistence: session-only
+
+  contracts:
+    required_fields:
+      - content
+      - source          # "user_said" | "x_context" | "derived" | "system"
+      - confidence      # 0.0 - 1.0
+      - scope           # "session" | "user" | "global"
+      - retention_days  # 0 = session only, >0 = cross-session
+      - write_permission # "user_only" | "agent" | "system"
+      - created_at
+      - last_accessed
+
+  policies:
+    max_facts_per_query: 3
+    auto_expire_session: true
+    require_user_consent_for_cross_session: true
+    audit_every_write: true
+    revoke_endpoint: true
+
+  cross_session:
+    enabled: false
+    max_items: 200
+    decay_after_days: 90
