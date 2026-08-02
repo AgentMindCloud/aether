@@ -1,6 +1,6 @@
 """Aether Governed Memory Store — P5.
 
-Primary: Postgres (Docker) when AETHER_DATABASE_URL or default local is reachable.
+Primary: Postgres when reachable (default matches common local install).
 Fallback: encrypted file store (~/.aether/memory).
 Contracts enforced either way. Learning fields supported (feedback, distill).
 """
@@ -72,9 +72,10 @@ def _get_fernet() -> Any | None:
 
 
 def _default_dsn() -> str:
+    # Prefer explicit env; default matches the user's running Postgres instance
     return os.getenv(
         "AETHER_DATABASE_URL",
-        "postgresql://aether:aether_local_dev@127.0.0.1:5432/aether",
+        "postgresql://postgres:postgres@127.0.0.1:5432/postgres",
     )
 
 
@@ -92,23 +93,26 @@ class GovernedMemoryStore:
         self._session: list[dict[str, Any]] = []
         self._user: list[dict[str, Any]] = []
         self._consent = {"cross_session": False, "updated_at": None}
+        self.dsn_used = _default_dsn()
 
         if _HAS_PG:
             try:
-                self._pg = psycopg.connect(_default_dsn(), row_factory=dict_row, autocommit=True)
+                self._pg = psycopg.connect(self.dsn_used, row_factory=dict_row, autocommit=True)
                 self._ensure_pg_schema()
                 self.backend = "postgres"
                 self._consent = self._pg_load_consent()
-            except Exception:
+            except Exception as e:
                 self._pg = None
                 self.backend = "file"
+                self._connect_error = str(e)
+        else:
+            self._connect_error = "psycopg not installed (pip install 'psycopg[binary]')"
 
         if self.backend == "file":
             self._session = self._load(self.session_path)
             self._user = self._load(self.user_path)
             self._consent = self._load_consent_file()
 
-    # ---------- Postgres ----------
     def _ensure_pg_schema(self) -> None:
         assert self._pg is not None
         self._pg.execute(
@@ -133,8 +137,8 @@ class GovernedMemoryStore:
                 value JSONB NOT NULL,
                 updated_at TIMESTAMPTZ NOT NULL
             );
-            CREATE INDEX IF NOT EXISTS idx_facts_scope ON aether_facts(scope);
-            CREATE INDEX IF NOT EXISTS idx_facts_content ON aether_facts USING gin (to_tsvector('english', content));
+            CREATE INDEX IF NOT EXISTS idx_aether_facts_scope ON aether_facts(scope);
+            CREATE INDEX IF NOT EXISTS idx_aether_facts_content ON aether_facts USING gin (to_tsvector('english', content));
             """
         )
 
@@ -232,10 +236,10 @@ class GovernedMemoryStore:
             "cross_session_consent": self._consent.get("cross_session", False),
             "encrypted_at_rest": False,
             "backend": "postgres",
+            "dsn": self.dsn_used.split("@")[-1] if "@" in self.dsn_used else self.dsn_used,
             "crypto_available": _HAS_CRYPTO,
         }
 
-    # ---------- File fallback ----------
     def _encode(self, data: list[dict[str, Any]]) -> str:
         raw = json.dumps(data)
         if self._fernet:
@@ -281,7 +285,6 @@ class GovernedMemoryStore:
         except Exception:
             return {"cross_session": False, "updated_at": None}
 
-    # ---------- Shared API ----------
     def set_cross_session_consent(self, granted: bool) -> dict[str, Any]:
         self._consent = {"cross_session": bool(granted), "updated_at": _now()}
         if self.backend == "postgres" and self._pg:
@@ -357,7 +360,6 @@ class GovernedMemoryStore:
         return [f for _, f in scored[:max_records]]
 
     def feedback(self, fact_id: str, useful: bool, note: str = "") -> dict[str, Any]:
-        """Learning signal: adjust confidence and feedback_score."""
         delta = 0.08 if useful else -0.12
         if self.backend == "postgres" and self._pg:
             row = self._pg.execute("SELECT * FROM aether_facts WHERE id = %s", (fact_id,)).fetchone()
@@ -385,7 +387,6 @@ class GovernedMemoryStore:
         return {"error": "fact not found", "id": fact_id}
 
     def distill_session_to_user(self, max_facts: int = 5, min_confidence: float = 0.7) -> dict[str, Any]:
-        """Propose high-value session facts for promotion to user scope (consent required)."""
         if not self._consent.get("cross_session"):
             return {"status": "blocked", "reason": "cross_session consent required", "proposed": []}
 
@@ -434,7 +435,7 @@ class GovernedMemoryStore:
             s = self._pg_stats()
             s["root"] = str(self.root)
             return s
-        return {
+        out = {
             "session_facts": len(self._session),
             "user_facts": len(self._user),
             "cross_session_consent": self._consent.get("cross_session", False),
@@ -443,6 +444,9 @@ class GovernedMemoryStore:
             "crypto_available": _HAS_CRYPTO,
             "root": str(self.root),
         }
+        if hasattr(self, "_connect_error") and self._connect_error:
+            out["postgres_connect_error"] = self._connect_error
+        return out
 
 
 memory_store = GovernedMemoryStore()

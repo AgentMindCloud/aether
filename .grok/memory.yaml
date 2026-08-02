@@ -1,5 +1,5 @@
 memory:
-  description: Governed memory contracts for Aether. Postgres primary (Docker), encrypted file fallback.
+  description: Governed memory contracts. Postgres primary, encrypted file fallback.
 
   required_fields:
     - content
@@ -41,4 +41,4 @@ memory:
     primary: postgres
     fallback: encrypted_file
     dsn_env: AETHER_DATABASE_URL
-    default_dsn: postgresql://aether:aether_local_dev@127.0.0.1:5432/aether
+    default_dsn: postgresql://postgres:postgres@127.0.0.1:5432/postgres
