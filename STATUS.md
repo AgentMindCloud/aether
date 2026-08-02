@@ -1,43 +1,43 @@
-# Aether Status — 2026-08-02 (P4 complete)
+# Aether Status — 2026-08-02 (P5 complete)
 
-## Architecture decision (locked)
+## Long-horizon decisions (locked)
 
-**Aether brain stays local and owned.**  
-n8n / Supabase are optional *tools*, never the core memory or orchestration brain.  
-Hybrid voice + UI buttons + GitHub actions + modular LLM slots are first-class inside the existing Electron + Python + `.grok/` design.
+| Need | Solution |
+|------|----------|
+| Remember across sessions | **Postgres** (Docker) primary + file fallback |
+| Learn / get better | **Feedback → confidence** + **distill session → user** (consent) |
+| Local models | **Ollama** (embeddings + optional chat) |
+| Automation | Aether proactive + **optional n8n webhook tool** |
+| Core memory | Owned Postgres on your machine — not Supabase |
 
-## Ready
+n8n is never the brain. Slack/Notion are optional notification targets via n8n, not required for memory or learning.
 
-### P0–P3
-- [x] Presence shell, contracts, kill switch, voice path, encrypted memory, proactive, packaging
+## P5 shipped
 
-### P4 (from console.x.ai voice-agent input — filtered)
-- [x] **LLM abstraction** — `.grok/models.yaml` + `/model` + `/switch-model` + `AETHER_MODEL` env
-- [x] **Tool registry expansion** — GitHub issues/PRs/create-issue staged tools
-- [x] **Optional n8n webhook tool** — explicit external orchestration only; memory never leaves Aether
-- [x] **Hybrid action suggestions** — voice turns return `suggested_actions` for floating UI buttons
-- [x] Version **0.4.0**
+- [x] `docker-compose.yml` — Postgres 16
+- [x] Governed memory: Postgres primary, encrypted file fallback
+- [x] Learning: `/learning/feedback`, `/learning/distill`, `/learning/status`
+- [x] Ollama client + health in `/health`
+- [x] Consent-gated cross-session + promotion path
+- [x] Version **0.5.0**
 
-## Explicit non-goals (still)
-
-- Supabase / Postgres as primary memory
-- n8n as the agent brain
-- Dual-runtime ownership split
-
-## Run
+## Run (years-grade path)
 
 ```bash
-pip install -e ".[crypto]"
+docker compose up -d
+pip install -e ".[db,crypto]"
+# optional: ollama pull nomic-embed-text
 aether --demo
 aether --serve
 cd shell && npm start
 ```
 
-## Next high-leverage
+Default DSN: `postgresql://aether:aether_local_dev@127.0.0.1:5432/aether`  
+Override: `AETHER_DATABASE_URL`
 
-- Live GitHub connector calls (use platform GitHub tools for real list/create)
-- Panel UI for suggested_actions + recent audit
-- Real Grok Voice Realtime WebSocket when keys present
-- Richer computer-use (type/click) behind existing gates
+## Next (optional)
 
-**P4 goal achieved: modular model, GitHub tools, optional n8n, hybrid suggestions — without surrendering ownership.**
+- Real GitHub connector execution
+- Ollama embeddings in query ranking
+- Panel UI for feedback + suggested actions
+- Live Grok Voice Realtime WebSocket

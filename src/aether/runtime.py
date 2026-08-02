@@ -1,7 +1,7 @@
-"""Aether runtime — P0 → P4.
+"""Aether runtime — P0 → P5.
 
-P4: modular LLM abstraction, GitHub tools, optional n8n webhook,
-hybrid action readiness. Core remains local + owned.
+P5: Postgres memory (primary), file fallback, learning (feedback/distill),
+Ollama local models, long-horizon durability.
 """
 
 from __future__ import annotations
@@ -22,16 +22,15 @@ from aether.proactive import proactive_engine
 from aether import content as content_tools
 from aether import models as model_layer
 from aether import github_tools
+from aether import learning
+from aether.ollama_client import ollama
 
-VERSION = "0.4.0"
+VERSION = "0.5.0"
 
 
 def check_kill_switch() -> None:
     if os.getenv("AETHER_DISABLED") == "1":
-        raise RuntimeError(
-            "Aether kill switch engaged (AETHER_DISABLED=1). "
-            "All voice and text activity halted."
-        )
+        raise RuntimeError("Aether kill switch engaged (AETHER_DISABLED=1). All activity halted.")
 
 
 def validate_env(required: list[str] | None = None) -> dict[str, str]:
@@ -57,20 +56,15 @@ def _now_iso() -> str:
 
 
 _PRIORITY: list[dict[str, Any]] = [
-    {"id": "p1", "title": "Switch model config + run first live voice session", "meta": "High impact · Now", "level": "high", "source": "system", "created_at": _now_iso()},
-    {"id": "p2", "title": "Wire GitHub list issues for AgentMindCloud/aether", "meta": "Builder · Today", "level": "high", "source": "system", "created_at": _now_iso()},
+    {"id": "p1", "title": "Enable cross-session consent + first distill", "meta": "Memory · Now", "level": "high", "source": "system", "created_at": _now_iso()},
+    {"id": "p2", "title": "Confirm Postgres backend + Ollama status", "meta": "Infra · Today", "level": "high", "source": "system", "created_at": _now_iso()},
 ]
 
 _BOOKMARKS: list[dict[str, Any]] = [
     {
-        "id": "b1", "category": "Immediate", "title": "Modular model swap + GitHub actions live",
-        "source": "Aether P4", "score": 9.4,
-        "plan": ["POST /switch-model", "GET /model", "Call /github/issues for aether", "Optional n8n webhook only as tool"],
-    },
-    {
-        "id": "b2", "category": "Act soon", "title": "Hybrid voice + action buttons (commit/PR later)",
-        "source": "Aether", "score": 8.7,
-        "plan": ["Keep confirmation gates", "Surface suggested actions after voice turns", "Dashboard of recent audit events"],
+        "id": "b1", "category": "Immediate", "title": "Long-term memory online (Postgres + learning)",
+        "source": "Aether P5", "score": 9.7,
+        "plan": ["docker compose up -d", "pip install -e .[db,crypto]", "POST /memory/consent", "POST /learning/distill"],
     },
 ]
 
@@ -80,36 +74,38 @@ _AUDIT: list[dict[str, Any]] = []
 
 def _audit(event: str, payload: dict[str, Any]) -> None:
     _AUDIT.append({"event": event, "at": _now_iso(), **payload})
-    if len(_AUDIT) > 300:
-        del _AUDIT[:50]
+    if len(_AUDIT) > 400:
+        del _AUDIT[:80]
 
 
 def start_voice_session(user_id: str, mode: str = "reactive") -> dict[str, Any]:
     check_kill_switch()
     result = voice_client.start_session(user_id, mode)
     result["model"] = model_layer.get_model()
-    _audit("session_start", {"session_id": result.get("session_id"), "live": result.get("live")})
+    result["memory_backend"] = memory_store.stats().get("backend")
+    _audit("session_start", {"session_id": result.get("session_id")})
     return result
 
 
 def handle_turn(session_id: str, transcript: str, x_context: list[dict] | None = None) -> dict[str, Any]:
     check_kill_switch()
-    memories = memory_store.query(transcript, max_records=3)
+    memories = memory_store.query(transcript, max_records=5)
     result = voice_client.process_turn(session_id, transcript, x_context, memories)
     result["memory_contracts"] = memories
     result["model"] = model_layer.get_model()
-    # Lightweight context-aware action suggestions (hybrid UI signal)
+    result["memory_backend"] = memory_store.stats().get("backend")
     t = transcript.lower()
     suggestions = []
-    if any(w in t for w in ("issue", "github", "pr", "pull", "commit")):
-        suggestions.append({"action": "github_list_issues", "label": "List issues"})
-        suggestions.append({"action": "github_list_prs", "label": "List PRs"})
-    if any(w in t for w in ("screenshot", "screen", "capture")):
-        suggestions.append({"action": "computer_use_screenshot", "label": "Take screenshot"})
-    if any(w in t for w in ("thread", "post", "idea", "hook")):
-        suggestions.append({"action": "content_ideate", "label": "Ideate thread"})
+    if any(w in t for w in ("issue", "github", "pr", "pull")):
+        suggestions += [{"action": "github_list_issues", "label": "List issues"}, {"action": "github_list_prs", "label": "List PRs"}]
+    if any(w in t for w in ("remember", "learn", "forget", "feedback")):
+        suggestions.append({"action": "learning_status", "label": "Learning status"})
+    if any(w in t for w in ("screenshot", "screen")):
+        suggestions.append({"action": "computer_use_screenshot", "label": "Screenshot"})
+    if any(w in t for w in ("thread", "post", "idea")):
+        suggestions.append({"action": "content_ideate", "label": "Ideate"})
     result["suggested_actions"] = suggestions
-    _audit("turn", {"session_id": session_id, "turns": result.get("turn")})
+    _audit("turn", {"session_id": session_id})
     return result
 
 
@@ -127,27 +123,25 @@ def update_presence(expression: str, status: str, intensity: float = 0.7) -> dic
     if status not in valid_status:
         status = "idle"
     intensity = max(0.0, min(1.0, float(intensity)))
-    return {"expression": expression, "status": status, "intensity": intensity, "avatar": "updated", "timestamp": _now_iso()}
+    return {"expression": expression, "status": status, "intensity": intensity, "timestamp": _now_iso()}
 
 
 def first_use_magic(user_id: str = "local") -> dict[str, Any]:
     check_kill_switch()
-    insight = content_tools.audience_insight()
-    moves = [
-        {"id": "m1", "title": "Start live voice + check model", "why": "Presence + modular model path", "effort": "low", "impact": "high"},
-        {"id": "m2", "title": "List GitHub issues for a key repo", "why": "Builder actions without leaving presence", "effort": "low", "impact": "high"},
-        {"id": "m3", "title": "Opt into proactive; keep memory local", "why": "No Supabase required — owned brain", "effort": "low", "impact": "medium"},
-    ]
     return {
         "type": "first_use_magic",
-        "user_id": user_id,
-        "message": "Welcome. Modular agent surface is live. Three next moves.",
-        "audience_insight": insight,
-        "moves": moves,
-        "presence": {"expression": "pleased", "status": "speaking", "intensity": 0.8},
-        "memory_stats": memory_store.stats(),
-        "proactive": proactive_engine.status(),
+        "message": "Long-horizon memory and learning are online. Three moves.",
+        "moves": [
+            {"id": "m1", "title": "Grant cross-session consent", "why": "Unlock remember-across-sessions", "effort": "low", "impact": "high"},
+            {"id": "m2", "title": "Write a preference + give feedback later", "why": "Starts the learning loop", "effort": "low", "impact": "high"},
+            {"id": "m3", "title": "Check Ollama + Postgres health", "why": "Confirm local stack", "effort": "low", "impact": "medium"},
+        ],
+        "memory": memory_store.stats(),
+        "ollama": ollama.status(),
+        "learning": learning.learning_status(),
         "model": model_layer.model_status(),
+        "proactive": proactive_engine.status(),
+        "presence": {"expression": "pleased", "status": "speaking", "intensity": 0.8},
         "timestamp": _now_iso(),
     }
 
@@ -159,14 +153,14 @@ def computer_use_request(action: str, details: dict[str, Any] | None = None) -> 
     if action not in allowed:
         return {"error": f"Unknown action: {action}", "allowed": list(allowed)}
     request_id = str(uuid.uuid4())[:8]
-    _PENDING_COMPUTER_USE = {"request_id": request_id, "action": action, "details": details or {}, "status": "awaiting_spoken_confirmation", "created_at": _now_iso(), "expires_in_seconds": 20}
+    _PENDING_COMPUTER_USE = {"request_id": request_id, "action": action, "details": details or {}, "status": "awaiting_spoken_confirmation", "created_at": _now_iso()}
     _audit("computer_use_request", {"request_id": request_id, "action": action})
     return {
         "status": "awaiting_spoken_confirmation",
         "request_id": request_id,
         "action": action,
-        "message": f"I need spoken confirmation before I {action}. Say yes within 20 seconds.",
-        "safety": {"require_spoken_confirmation": True, "never_execute_without_confirm": True},
+        "message": f"Spoken confirmation required before {action}.",
+        "safety": {"require_spoken_confirmation": True},
         "timestamp": _now_iso(),
     }
 
@@ -175,24 +169,20 @@ def computer_use_confirm(request_id: str, spoken_yes: bool = True) -> dict[str, 
     global _PENDING_COMPUTER_USE
     check_kill_switch()
     if not _PENDING_COMPUTER_USE or _PENDING_COMPUTER_USE["request_id"] != request_id:
-        return {"error": "No matching pending computer-use request", "request_id": request_id}
+        return {"error": "No matching pending request"}
     pending = _PENDING_COMPUTER_USE
     _PENDING_COMPUTER_USE = None
     if not spoken_yes:
-        _audit("computer_use_cancelled", {"request_id": request_id})
-        return {"status": "cancelled", "request_id": request_id, "action": pending["action"], "message": "Cancelled. No changes made.", "timestamp": _now_iso()}
-    result = {
+        return {"status": "cancelled", "request_id": request_id, "action": pending["action"]}
+    _audit("computer_use_confirmed", {"request_id": request_id})
+    return {
         "status": "confirmed_execute",
         "request_id": request_id,
         "action": pending["action"],
         "details": pending["details"],
-        "message": f"Confirmed. Shell may now execute: {pending['action']}",
         "execute_on_shell": True,
-        "audit": {"confirmed_by": "spoken", "executed_at": _now_iso()},
         "timestamp": _now_iso(),
     }
-    _audit("computer_use_confirmed", {"request_id": request_id, "action": pending["action"]})
-    return result
 
 
 def list_priority() -> list[dict[str, Any]]:
@@ -208,48 +198,55 @@ def make_it_real(bookmark_id: str) -> dict[str, Any]:
     bm = next((b for b in _BOOKMARKS if b["id"] == bookmark_id), None)
     if not bm:
         return {"error": f"Bookmark {bookmark_id} not found"}
-    new_item = {"id": f"p-{uuid.uuid4().hex[:6]}", "title": bm["title"], "meta": f"From Bookmark · {bm['category']} · just now", "level": "high", "source": "make_it_real", "plan": bm.get("plan", []), "created_at": _now_iso()}
-    _PRIORITY.insert(0, new_item)
-    _audit("make_it_real", {"bookmark_id": bookmark_id})
-    return {"status": "promoted", "priority_item": new_item, "message": f"‘{bm['title']}’ is now in Priority as high impact.", "presence": {"expression": "pleased", "status": "speaking", "intensity": 0.7}, "timestamp": _now_iso()}
+    item = {"id": f"p-{uuid.uuid4().hex[:6]}", "title": bm["title"], "meta": f"From Bookmark · just now", "level": "high", "source": "make_it_real", "plan": bm.get("plan", []), "created_at": _now_iso()}
+    _PRIORITY.insert(0, item)
+    return {"status": "promoted", "priority_item": item, "timestamp": _now_iso()}
 
 
 def add_priority(title: str, level: str = "high") -> dict[str, Any]:
-    check_kill_switch()
-    item = {"id": f"p-{uuid.uuid4().hex[:6]}", "title": title, "meta": "Just captured · Now", "level": level, "source": "capture", "created_at": _now_iso()}
+    item = {"id": f"p-{uuid.uuid4().hex[:6]}", "title": title, "meta": "Captured · Now", "level": level, "source": "capture", "created_at": _now_iso()}
     _PRIORITY.insert(0, item)
     return {"status": "added", "item": item}
 
 
 def run_demo() -> None:
     print("\n════════════════════════════════════════════════════════════")
-    print(f"  AETHER  ·  P4 demo  ·  v{VERSION}")
+    print(f"  AETHER  ·  P5 demo  ·  v{VERSION}")
     print("════════════════════════════════════════════════════════════\n")
     check_kill_switch()
-    print("→ Model status …")
-    print(json.dumps(model_layer.model_status(), indent=2), "\n")
-    print("→ Switch model (demo) …")
-    print(json.dumps(model_layer.switch_model("grok-4.20-multi-agent"), indent=2), "\n")
-    sess = start_voice_session("demo-user")
-    print("→ Voice session …")
-    print(json.dumps(sess, indent=2), "\n")
-    print("→ Turn with suggested actions …")
-    print(json.dumps(handle_turn(sess["session_id"], "Show me GitHub issues and maybe a screenshot"), indent=2), "\n")
-    print("→ GitHub list issues (connector-ready) …")
-    print(json.dumps(github_tools.list_issues("AgentMindCloud", "aether"), indent=2), "\n")
-    print("→ Memory stats …")
+    print("→ Memory backend …")
     print(json.dumps(memory_store.stats(), indent=2), "\n")
+    print("→ Ollama …")
+    print(json.dumps(ollama.status(), indent=2), "\n")
+    print("→ Consent + write preference …")
+    memory_store.set_cross_session_consent(True)
+    fact = memory_store.write({
+        "content": "User prefers short calm voice answers and concrete next actions.",
+        "source": "user_said",
+        "confidence": 0.92,
+        "scope": "user",
+        "retention_days": 365,
+        "write_permission": "user_only",
+        "created_at": _now_iso(),
+        "last_accessed": _now_iso(),
+    })
+    print(json.dumps(fact, indent=2), "\n")
+    print("→ Feedback (learning) …")
+    print(json.dumps(learning.record_feedback(fact["id"], True, "accurate"), indent=2), "\n")
+    print("→ Query …")
+    print(json.dumps(memory_store.query("calm voice"), indent=2), "\n")
+    print("→ Distill …")
+    print(json.dumps(learning.distill(), indent=2), "\n")
     print("→ First-use …")
     print(json.dumps(first_use_magic(), indent=2), "\n")
     print("════════════════════════════════════════════════════════════")
-    print("  P4 complete. Modular model · GitHub tools · optional n8n · hybrid suggestions")
-    print("  Memory stays local. n8n is a tool, not the brain.")
+    print("  P5 ready. Postgres (or file) · Ollama · Learning · years-grade memory")
     print("════════════════════════════════════════════════════════════\n")
 
 
 class AetherHandler(BaseHTTPRequestHandler):
     def _json(self, code: int, payload: Any) -> None:
-        body = json.dumps(payload).encode("utf-8")
+        body = json.dumps(payload, default=str).encode("utf-8")
         self.send_response(code)
         self.send_header("Content-Type", "application/json")
         self.send_header("Content-Length", str(len(body)))
@@ -270,10 +267,13 @@ class AetherHandler(BaseHTTPRequestHandler):
             check_kill_switch()
             if path == "/health":
                 self._json(200, {
-                    "status": "ok", "version": VERSION, "p": "P4",
-                    "voice_live": voice_client.live, "realtime_ready": voice_client.realtime_ready,
-                    "memory": memory_store.stats(), "proactive": proactive_engine.status(),
+                    "status": "ok", "version": VERSION, "p": "P5",
+                    "voice_live": voice_client.live,
+                    "memory": memory_store.stats(),
+                    "ollama": ollama.status(),
+                    "learning": learning.learning_status(),
                     "model": model_layer.model_status(),
+                    "proactive": proactive_engine.status(),
                 })
             elif path == "/priority":
                 self._json(200, {"items": list_priority()})
@@ -285,12 +285,16 @@ class AetherHandler(BaseHTTPRequestHandler):
                 self._json(200, first_use_magic())
             elif path == "/memory/stats":
                 self._json(200, memory_store.stats())
+            elif path == "/learning/status":
+                self._json(200, learning.learning_status())
+            elif path == "/ollama":
+                self._json(200, ollama.status())
             elif path == "/proactive/status":
                 self._json(200, proactive_engine.status())
             elif path == "/model":
                 self._json(200, model_layer.model_status())
             elif path == "/audit":
-                self._json(200, {"events": _AUDIT[-40:]})
+                self._json(200, {"events": _AUDIT[-50:]})
             else:
                 self._json(404, {"error": "not found"})
         except RuntimeError as e:
@@ -328,9 +332,13 @@ class AetherHandler(BaseHTTPRequestHandler):
             elif path == "/memory/write":
                 self._json(200, memory_store.write(data))
             elif path == "/memory/query":
-                self._json(200, {"facts": memory_store.query(data.get("text", ""), data.get("max", 3))})
+                self._json(200, {"facts": memory_store.query(data.get("text", ""), data.get("max", 5))})
             elif path == "/memory/consent":
                 self._json(200, memory_store.set_cross_session_consent(bool(data.get("granted", False))))
+            elif path == "/learning/feedback":
+                self._json(200, learning.record_feedback(data.get("fact_id", ""), bool(data.get("useful", True)), data.get("note", "")))
+            elif path == "/learning/distill":
+                self._json(200, learning.distill(int(data.get("max_facts", 5)), float(data.get("min_confidence", 0.7))))
             elif path == "/proactive/opt-in":
                 self._json(200, proactive_engine.set_opt_in(bool(data.get("opted_in", True))))
             elif path == "/proactive/evaluate":
@@ -363,8 +371,8 @@ class AetherHandler(BaseHTTPRequestHandler):
 def run_serve(host: str = "127.0.0.1", port: int = 7420) -> None:
     check_kill_switch()
     server = HTTPServer((host, port), AetherHandler)
-    print(f"Aether P4 IPC on http://{host}:{port}  (v{VERSION})")
-    print("Model · Voice · Memory · Proactive · GitHub · Content · n8n(optional) · Audit")
+    print(f"Aether P5 IPC http://{host}:{port}  v{VERSION}")
+    print(f"Memory backend: {memory_store.stats().get('backend')} | Ollama: {ollama.available}")
     print("Ctrl+C to stop.\n")
     try:
         server.serve_forever()
@@ -394,7 +402,7 @@ def main() -> None:
             for k, v in found.items():
                 print(f"  {k}: {v}")
             print("Memory:", memory_store.stats())
-            print("Model:", model_layer.model_status())
+            print("Ollama:", ollama.status())
         except EnvironmentError as e:
             print(e, file=sys.stderr)
             sys.exit(1)
@@ -408,9 +416,10 @@ def main() -> None:
             sys.exit(1)
         return
     parser.print_help()
-    print(f"\n  aether --demo   # P4 offline (v{VERSION})")
+    print(f"\n  docker compose up -d          # Postgres")
+    print(f"  pip install -e \".[db,crypto]\"")
+    print(f"  aether --demo                 # P5 (v{VERSION})")
     print("  aether --serve")
-    print("  cd shell && npm start")
 
 
 if __name__ == "__main__":

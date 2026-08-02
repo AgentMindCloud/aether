@@ -1,73 +1,64 @@
 # Aether
 
-**Desktop presence operating surface for high-agency builders and creators.**
+**Desktop presence operating surface for high-agency builders.**
 
-Governed memory · Live X context · Real-time Grok Voice · Computer-use tools · Action plans · Full auditability
+Governed memory (Postgres) · Learning loop · Ollama · Grok Voice · Live X · Computer-use · Action plans
 
-Version **0.3.0** (P3). Built by AgentMindCloud. Not affiliated with xAI / Grok / X.
+**v0.5.0** — built for years of use. Owned by you. Not affiliated with xAI / Grok / X.
 
 ---
 
-## Quick Start
+## Quick start (durable path)
 
 ```bash
 git clone https://github.com/AgentMindCloud/aether.git
 cd aether
-pip install -e ".[crypto]"   # crypto optional but recommended
+docker compose up -d
+pip install -e ".[db,crypto]"
 aether --demo
+aether --serve
 ```
 
-Full local:
+Shell:
 
 ```bash
-aether --serve               # IPC :7420
 cd shell && npm install && npm start
 ```
-
-Package the shell:
-
-```bash
-cd shell && npm run dist     # or dist:win / dist:mac / dist:linux
-```
-
-Live voice: set `GROK_VOICE_API_KEY` in `.env`.
-
----
-
-## Capabilities (P3)
-
-| Area | Status |
-|------|--------|
-| Voice Think Fast 2.0 + Realtime structure | Ready |
-| Partial transcripts | `/voice/partial` |
-| Governed memory + Fernet encryption | Ready (optional dep) |
-| Proactive (opt-in, cooldown, spikes) | Ready |
-| Computer-use (screenshot + gates) | Ready |
-| Content ideation / replies / insight | Ready |
-| Action Plan / Make it real | Ready |
-| electron-builder packaging | Configured |
-| Kill switch | `AETHER_DISABLED=1` |
 
 ---
 
 ## Architecture
 
 ```
-Electron shell (tray, panel, hotkeys, screenshot)
-        │  HTTP :7420
-        ▼
-Python runtime v0.3
-  · Voice client (Think Fast 2.0 / Realtime-ready)
-  · Encrypted governed memory store
-  · Proactive engine
-  · Content tools
-  · Computer-use confirmation gate
-  · Priority + Action Plan
-  · Safety + audit
+Electron shell
+     │ HTTP :7420
+     ▼
+Python runtime
+  · Voice (Think Fast 2.0 path)
+  · Governed memory → Postgres (Docker) / file fallback
+  · Learning (feedback + distill)
+  · Ollama (local embeddings / fallback)
+  · Proactive + optional n8n tool
+  · GitHub tools · Content · Computer-use gates
+  · Kill switch + audit
 ```
+
+**Memory is local and owned.** n8n is automation muscle only.
 
 ---
 
-See [STATUS.md](STATUS.md) for the full checklist.
+## Key endpoints
 
-**Aether** — presence you can own and audit.
+| Area | Endpoints |
+|------|-----------|
+| Memory | `/memory/write` `/memory/query` `/memory/consent` `/memory/stats` |
+| Learning | `/learning/feedback` `/learning/distill` `/learning/status` |
+| Voice | `/voice/start` `/voice/turn` `/voice/partial` `/voice/end` |
+| Model | `/model` `/switch-model` |
+| Ollama | `/ollama` |
+| GitHub | `/github/issues` `/github/prs` |
+| n8n | `/n8n/webhook` |
+
+---
+
+See [STATUS.md](STATUS.md).

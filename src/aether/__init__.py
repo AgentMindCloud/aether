@@ -1,3 +1,3 @@
 """Aether — desktop presence operating surface for high-agency builders."""
 
-__version__ = "0.4.0"
+__version__ = "0.5.0"

@@ -4,29 +4,26 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "aether"
-version = "0.4.0"
+version = "0.5.0"
 description = "Desktop presence operating surface for high-agency builders — governed memory, Grok Voice, live X context, computer-use, action plans"
 readme = "README.md"
 requires-python = ">=3.11"
 license = {text = "Apache-2.0"}
-authors = [
-    {name = "AgentMindCloud", email = "jani@agentmindcloud.com"}
-]
-keywords = ["grok", "xai", "voice-agent", "multi-agent", "presence", "desktop", "electron"]
+authors = [{name = "AgentMindCloud", email = "jani@agentmindcloud.com"}]
+keywords = ["grok", "xai", "voice-agent", "presence", "desktop"]
 classifiers = [
     "Development Status :: 3 - Alpha",
-    "Intended Audience :: Developers",
     "License :: OSI Approved :: Apache Software License",
     "Programming Language :: Python :: 3",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
-    "Topic :: Scientific/Engineering :: Artificial Intelligence",
 ]
 dependencies = []
 
 [project.optional-dependencies]
 crypto = ["cryptography>=42.0.0"]
-dev = ["pytest>=7.0", "pyyaml>=6.0", "cryptography>=42.0.0"]
+db = ["psycopg[binary]>=3.1.0"]
+dev = ["pytest>=7.0", "pyyaml>=6.0", "cryptography>=42.0.0", "psycopg[binary]>=3.1.0"]
 
 [project.scripts]
 aether = "aether.runtime:main"
@@ -34,7 +31,6 @@ aether = "aether.runtime:main"
 [project.urls]
 Homepage = "https://github.com/AgentMindCloud/aether"
 Repository = "https://github.com/AgentMindCloud/aether"
-Issues = "https://github.com/AgentMindCloud/aether/issues"
 
 [tool.setuptools.packages.find]
 where = ["src"]
