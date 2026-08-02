@@ -27,9 +27,6 @@ It exists for builders who want:
 - Full safety Constitution + kill switch they control
 - A single coherent presence surface (tray + voice + action plans)
 
-If you just want good voice conversations, use free Grok Voice.  
-If you want a transparent, composable, memory-contract-based presence OS that lives in *your* environment, Aether is for you.
-
 ---
 
 ## Quick Start
@@ -42,28 +39,28 @@ grok-install install github.com/AgentMindCloud/aether
 xlos install github.com/AgentMindCloud/aether
 ```
 
-### Option B — Local demo (zero keys, works offline right now)
+### Option B — Local demo (zero keys)
 
 ```bash
 git clone https://github.com/AgentMindCloud/aether.git
 cd aether
 pip install -e .
 aether --demo
-# or
-python -m aether.runtime --demo
 ```
 
-You will see the full P0 loop: kill-switch check → session start → governed memory contracts → presence update.
+Full P1 loop: kill-switch → session → first-use magic → memory contracts → computer-use confirmation → Make it real → presence.
 
-### Option C — Electron shell (tray + panel)
+### Option C — Full local (runtime + shell)
 
 ```bash
-cd shell
-npm install
-npm start
+# Terminal 1
+aether --serve          # IPC on http://127.0.0.1:7420
+
+# Terminal 2
+cd shell && npm install && npm start
 ```
 
-Tray icon + floating panel appear. Global hotkey: `Ctrl+Alt+A`.
+Tray + floating panel with Priority list, Bookmark Intelligence, Make it real, first-use button, and live presence.
 
 ### Live mode (keys required)
 
@@ -75,28 +72,29 @@ aether --check-env
 
 ---
 
-## Architecture (P0)
+## Architecture
 
 ```
 Native Shell (Electron)          Python Runtime (aether)
 ┌─────────────────────┐         ┌──────────────────────────────┐
-│ Tray + Floating     │  IPC    │ .grok/ contracts             │
+│ Tray + Floating     │  HTTP   │ .grok/ contracts             │
 │ Panel + Hotkeys     │ ◄─────► │ Swarm + Memory + Voice +     │
-│ Presence surface    │         │ Tools + Safety + Presence    │
+│ Priority / Plans    │  :7420  │ Tools + Safety + Presence    │
+│ Presence surface    │         │ First-use + Make it real     │
 └─────────────────────┘         └──────────────────────────────┘
 ```
 
-- Shell owns only OS surface (tray, window, hotkeys, audio routing, screenshot surface).
+- Shell owns only OS surface.
 - All intelligence, memory, safety, voice, and tools live in the Python runtime.
-- One process model, one memory model, one safety model, one presence model.
+- Computer-use actions always require spoken confirmation before execution.
 
 ---
 
 ## Status
 
-**P0 core scaffold is complete.** See [STATUS.md](STATUS.md).
+**P0 + P1 complete.** See [STATUS.md](STATUS.md).
 
-Next: live Grok Voice Think Fast 2.0 path + full IPC bridge + first-use magic.
+Next focus: live Grok Voice Think Fast 2.0 path + real computer-use surfaces behind the existing safety gates.
 
 ---
 
