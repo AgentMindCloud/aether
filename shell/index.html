@@ -41,10 +41,26 @@
       <div class="capture-hint">Ctrl + Alt + A · or type and press Enter</div>
     </section>
 
+    <section class="view active" id="priorityView">
+      <div class="view-header">
+        <div class="section-label">PRIORITY LIST</div>
+        <button class="text-btn" id="switchToBookmarks">Bookmarks →</button>
+      </div>
+      <ul class="priority-list" id="priorityList"></ul>
+    </section>
+
+    <section class="view" id="bookmarkView">
+      <div class="view-header">
+        <div class="section-label">BOOKMARK INTELLIGENCE</div>
+        <button class="text-btn" id="backToPriority">← Priority</button>
+      </div>
+      <ul class="bookmark-list" id="bookmarkList"></ul>
+    </section>
+
     <section class="status-bar">
       <div class="status-item">
         <span class="dot" id="runtimeDot"></span>
-        <span id="runtimeLabel">Runtime: demo ready</span>
+        <span id="runtimeLabel">Runtime: offline</span>
       </div>
       <div class="status-item">
         <span id="sessionLabel">No active session</span>
@@ -52,9 +68,24 @@
     </section>
 
     <footer class="panel-footer">
-      <button class="footer-btn" id="startSessionBtn">Start Voice Session</button>
-      <button class="footer-btn primary" id="openDemoBtn">Run Demo Loop</button>
+      <button class="footer-btn" id="firstUseBtn">First-use Magic</button>
+      <button class="footer-btn primary" id="startSessionBtn">Start Session</button>
     </footer>
+  </div>
+
+  <!-- Make it real modal -->
+  <div class="modal hidden" id="planModal">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h3 id="planTitle">Action Plan</h3>
+        <button class="icon-btn" id="closeModal">×</button>
+      </div>
+      <div class="modal-body" id="planBody"></div>
+      <div class="modal-footer">
+        <button class="footer-btn" id="cancelPlan">Cancel</button>
+        <button class="footer-btn primary" id="confirmMakeReal">Make it real →</button>
+      </div>
+    </div>
   </div>
 
   <script src="app.js"></script>
