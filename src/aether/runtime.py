@@ -64,7 +64,7 @@ _BOOKMARKS: list[dict[str, Any]] = [
     {
         "id": "b1", "category": "Immediate", "title": "Long-term memory online (Postgres + learning)",
         "source": "Aether P5", "score": 9.7,
-        "plan": ["docker compose up -d", "pip install -e .[db,crypto]", "POST /memory/consent", "POST /learning/distill"],
+        "plan": ["pip install -e .[db,crypto]", "aether --demo", "Confirm backend=postgres"],
     },
 ]
 
@@ -211,16 +211,25 @@ def add_priority(title: str, level: str = "high") -> dict[str, Any]:
 
 def run_demo() -> None:
     print("\n════════════════════════════════════════════════════════════")
-    print(f"  AETHER  ·  P5 demo  ·  v{VERSION}")
+    print(f"  AETHER  ·  P5 learning path  ·  v{VERSION}")
     print("════════════════════════════════════════════════════════════\n")
     check_kill_switch()
-    print("→ Memory backend …")
-    print(json.dumps(memory_store.stats(), indent=2), "\n")
-    print("→ Ollama …")
+
+    print("→ 0. Memory + Ollama health")
+    stats = memory_store.stats()
+    print(json.dumps(stats, indent=2))
     print(json.dumps(ollama.status(), indent=2), "\n")
-    print("→ Consent + write preference …")
-    memory_store.set_cross_session_consent(True)
-    fact = memory_store.write({
+    if stats.get("backend") != "postgres":
+        print("  ⚠ backend is not postgres — check DSN / psycopg / Postgres is running\n")
+    else:
+        print("  ✓ Postgres backend active\n")
+
+    print("→ 1. Grant cross-session consent")
+    consent = memory_store.set_cross_session_consent(True)
+    print(json.dumps(consent, indent=2), "\n")
+
+    print("→ 2. Write preference (user scope) + session fact")
+    user_fact = memory_store.write({
         "content": "User prefers short calm voice answers and concrete next actions.",
         "source": "user_said",
         "confidence": 0.92,
@@ -230,17 +239,38 @@ def run_demo() -> None:
         "created_at": _now_iso(),
         "last_accessed": _now_iso(),
     })
-    print(json.dumps(fact, indent=2), "\n")
-    print("→ Feedback (learning) …")
-    print(json.dumps(learning.record_feedback(fact["id"], True, "accurate"), indent=2), "\n")
-    print("→ Query …")
+    session_fact = memory_store.write({
+        "content": "In this session user confirmed Postgres memory path and wants learning loop active.",
+        "source": "derived",
+        "confidence": 0.88,
+        "scope": "session",
+        "retention_days": 0,
+        "write_permission": "user_only",
+        "created_at": _now_iso(),
+        "last_accessed": _now_iso(),
+    })
+    print("user_fact:", json.dumps(user_fact, indent=2))
+    print("session_fact:", json.dumps(session_fact, indent=2), "\n")
+
+    print("→ 3. Feedback (learning signal on user_fact)")
+    fb = learning.record_feedback(user_fact["id"], True, "accurate preference")
+    print(json.dumps(fb, indent=2), "\n")
+
+    print("→ Query (should retrieve preference)")
     print(json.dumps(memory_store.query("calm voice"), indent=2), "\n")
-    print("→ Distill …")
-    print(json.dumps(learning.distill(), indent=2), "\n")
-    print("→ First-use …")
+
+    print("→ Distill (promote high-confidence session → user)")
+    print(json.dumps(learning.distill(max_facts=3, min_confidence=0.7), indent=2), "\n")
+
+    print("→ Final memory stats")
+    print(json.dumps(memory_store.stats(), indent=2), "\n")
+
+    print("→ First-use snapshot")
     print(json.dumps(first_use_magic(), indent=2), "\n")
+
     print("════════════════════════════════════════════════════════════")
-    print("  P5 ready. Postgres (or file) · Ollama · Learning · years-grade memory")
+    print("  Tasks 1–3 complete: consent · write · feedback (+ distill)")
+    print("  Expect backend=postgres and rising user_facts count.")
     print("════════════════════════════════════════════════════════════\n")
 
 
@@ -416,9 +446,8 @@ def main() -> None:
             sys.exit(1)
         return
     parser.print_help()
-    print(f"\n  docker compose up -d          # Postgres")
-    print(f"  pip install -e \".[db,crypto]\"")
-    print(f"  aether --demo                 # P5 (v{VERSION})")
+    print(f"\n  pip install -e \".[db,crypto]\"")
+    print(f"  aether --demo                 # learning path (v{VERSION})")
     print("  aether --serve")
 
 
