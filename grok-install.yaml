@@ -1,0 +1,31 @@
+spec: grok-install/v2.14
+name: aether
+version: 0.1.0
+description: >
+  Desktop presence operating surface for high-agency builders and creators.
+  Real-time Grok Voice companion with governed memory contracts, live X context,
+  computer-use tools under spoken confirmation, proactive initiation, and full
+  safety Constitution + kill switch. Thin Electron shell + Python runtime.
+category: presence-agent
+certification_target: grok-native-certified
+tagline: Presence you can own and audit.
+entrypoint: .grok/swarm.yaml
+runtime:
+  python: ">=3.11"
+  grok: "4.20-multi-agent"   # ready for 4.6
+env:
+  - XAI_API_KEY
+  - X_BEARER_TOKEN
+  - X_OAUTH_TOKEN
+  - GROK_VOICE_API_KEY
+safety_profile: standard
+author: agentmindcloud
+license: Apache-2.0
+extensions:
+  runtime_dispatch:
+    type: python_module
+    module: aether.runtime
+  constitution:
+    - I
+    - III
+    - VII
