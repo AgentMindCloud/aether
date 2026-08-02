@@ -19,9 +19,12 @@ proactive:
     require_user_opt_in: true
     cooldown_minutes: 120
     never_interrupt_active_session: true
-    announce_reason: true   # "I noticed a spike in mentions about X — want to talk about it?"
+    announce_reason: true
 
   safety:
     respect_kill_switch: true
     respect_rate_limits: true
     log_every_initiation: true
+
+  # P3 runtime: evaluate via POST /proactive/evaluate with signals
+  # Opt-in via POST /proactive/opt-in { "opted_in": true }
