@@ -1,28 +1,44 @@
-# Governed Memory Contracts — core elevation
 memory:
-  enabled: true
-  encryption_at_rest: true
-  default_persistence: session-only
+  description: Governed memory contracts for Aether. Postgres primary (Docker), encrypted file fallback.
 
-  contracts:
-    required_fields:
-      - content
-      - source          # "user_said" | "x_context" | "derived" | "system"
-      - confidence      # 0.0 - 1.0
-      - scope           # "session" | "user" | "global"
-      - retention_days  # 0 = session only, >0 = cross-session
-      - write_permission # "user_only" | "agent" | "system"
-      - created_at
-      - last_accessed
+  required_fields:
+    - content
+    - source
+    - confidence
+    - scope
+    - retention_days
+    - write_permission
+    - created_at
+    - last_accessed
 
-  policies:
-    max_facts_per_query: 3
-    auto_expire_session: true
-    require_user_consent_for_cross_session: true
-    audit_every_write: true
-    revoke_endpoint: true
+  optional_learning_fields:
+    - feedback_score
+    - feedback_count
+    - tags
+    - meta
 
-  cross_session:
-    enabled: false
-    max_items: 200
-    decay_after_days: 90
+  sources:
+    - user_said
+    - x_context
+    - derived
+    - system
+    - distilled
+    - feedback
+
+  scopes:
+    - session
+    - user
+    - global
+
+  policy:
+    cross_session_requires_consent: true
+    default_session_retention_days: 0
+    default_user_retention_days: 365
+    distill_min_confidence: 0.7
+    feedback_adjusts_confidence: true
+
+  backends:
+    primary: postgres
+    fallback: encrypted_file
+    dsn_env: AETHER_DATABASE_URL
+    default_dsn: postgresql://aether:aether_local_dev@127.0.0.1:5432/aether
