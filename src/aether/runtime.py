@@ -1,6 +1,6 @@
-"""Aether runtime — P0 → P5.1
+"""Aether runtime — Build 0.1 felt presence
 
-P5.1: talk-friendly defaults, softer priority levels, optional bind host for mobile LAN.
+Talk-friendly defaults, memory-aware turns, optional bind host for mobile LAN.
 """
 
 from __future__ import annotations
@@ -24,7 +24,7 @@ from aether import github_tools
 from aether import learning
 from aether.ollama_client import ollama
 
-VERSION = "0.5.1"
+VERSION = "0.6.0"
 
 
 def check_kill_switch() -> None:
@@ -55,15 +55,15 @@ def _now_iso() -> str:
 
 
 _PRIORITY: list[dict[str, Any]] = [
-    {"id": "p1", "title": "Start Session and type a message", "meta": "Talk loop · Now", "level": "medium", "source": "system", "created_at": _now_iso()},
-    {"id": "p2", "title": "Optional: set GROK_VOICE_API_KEY for live voice", "meta": "Later", "level": "low", "source": "system", "created_at": _now_iso()},
+    {"id": "p1", "title": "Start Session and speak or type", "meta": "Talk loop · Now", "level": "medium", "source": "system", "created_at": _now_iso()},
+    {"id": "p2", "title": "Optional: GROK_VOICE_API_KEY for live voice later", "meta": "Later", "level": "low", "source": "system", "created_at": _now_iso()},
 ]
 
 _BOOKMARKS: list[dict[str, Any]] = [
     {
-        "id": "b1", "category": "Immediate", "title": "Talk path is live (text now, voice when keyed)",
-        "source": "Aether", "score": 9.4,
-        "plan": ["Start Session", "Type in the box", "Read reply in SESSION"],
+        "id": "b1", "category": "Immediate", "title": "Talk path is live (TTS + text, mic when allowed)",
+        "source": "Aether", "score": 9.5,
+        "plan": ["Start Session", "Type or use mic", "Hear agent reply"],
     },
 ]
 
@@ -129,10 +129,10 @@ def first_use_magic(user_id: str = "local") -> dict[str, Any]:
     check_kill_switch()
     return {
         "type": "first_use_magic",
-        "message": "Ready. Start Session, then type a message.",
+        "message": "Ready. Start Session, then speak or type.",
         "moves": [
-            {"id": "m1", "title": "Start Session and type a message", "why": "Talk loop works now", "effort": "low", "impact": "high"},
-            {"id": "m2", "title": "Optional live voice key later", "why": "Same path, real TTS/STT", "effort": "low", "impact": "medium"},
+            {"id": "m1", "title": "Start Session and speak or type", "why": "Talk loop + TTS works now", "effort": "low", "impact": "high"},
+            {"id": "m2", "title": "Optional live Grok Voice key later", "why": "Same path, Realtime stream", "effort": "low", "impact": "medium"},
             {"id": "m3", "title": "Mobile later uses same HTTP API", "why": "One brain, many surfaces", "effort": "low", "impact": "medium"},
         ],
         "memory": memory_store.stats(),
@@ -210,7 +210,7 @@ def add_priority(title: str, level: str = "medium") -> dict[str, Any]:
 
 def run_demo() -> None:
     print("\n════════════════════════════════════════════════════════════")
-    print(f"  AETHER  ·  P5.1  ·  v{VERSION}")
+    print(f"  AETHER  ·  Build 0.1  ·  v{VERSION}")
     print("════════════════════════════════════════════════════════════\n")
     check_kill_switch()
     print(json.dumps(memory_store.stats(), indent=2))
@@ -241,7 +241,7 @@ class AetherHandler(BaseHTTPRequestHandler):
             check_kill_switch()
             if path == "/health":
                 self._json(200, {
-                    "status": "ok", "version": VERSION, "p": "P5.1",
+                    "status": "ok", "version": VERSION, "p": "0.1",
                     "voice_live": voice_client.live,
                     "memory": memory_store.stats(),
                     "ollama": ollama.status(),
@@ -347,7 +347,7 @@ def run_serve(host: str | None = None, port: int = 7420) -> None:
     host = host or os.getenv("AETHER_HOST", "127.0.0.1")
     # For phone access on LAN later: AETHER_HOST=0.0.0.0
     server = HTTPServer((host, port), AetherHandler)
-    print(f"Aether P5.1 IPC http://{host}:{port}  v{VERSION}")
+    print(f"Aether Build 0.1 IPC http://{host}:{port}  v{VERSION}")
     print(f"Memory backend: {memory_store.stats().get('backend')} | Ollama: {ollama.available}")
     print("Ctrl+C to stop.\n")
     try:
